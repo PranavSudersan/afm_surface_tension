@@ -1,6 +1,6 @@
 import matplotlib
 import copy
-##import numpy as np
+import numpy as np
 #import sys
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -23,9 +23,10 @@ class AFMPlot:
         self.jpk_anal = jpk_anal
         self.file_path = jpk_anal.file_path
         #plot data
-        plot_params =  jpk_anal.anal_dict['plot_parameters']
-        for plot_type in plot_params['type']:
-            PLOT_DICT[plot_type](jpk_anal.df, plot_params)
+        for mode in jpk_anal.df.keys():
+            plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
+            for plot_type in plot_params['type']:
+                PLOT_DICT[plot_type](jpk_anal.df[mode], plot_params)
 
         plt.show(block=False)
 ##        plt.pause(0.05)
@@ -37,13 +38,14 @@ class AFMPlot:
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
+        title = plot_params['title']
         #organize data into matrix for heatmap plot
         df_data = df.pivot_table(values=z, index=y, columns=x,
                                  aggfunc='first')
         df_reference = df.pivot_table(values='Segment folder', index=y,
                                       columns=x, aggfunc='first')
         #plot
-        fig2d = plt.figure('2D map')
+        fig2d = plt.figure(f'{title}')
         ax2d = fig2d.add_subplot(111)
         im2d = ax2d.pcolormesh(df_data.columns, df_data.index,
                                df_data, cmap='afmhot')
@@ -51,9 +53,15 @@ class AFMPlot:
         ax2d.set_xlabel(x)
         ax2d.set_ylabel(y)
         fig2d.colorbar(im2d, ax=ax2d, label=z)
-        fig2d.suptitle(plot_params['title'])
+        fig2d.suptitle(title)
 
         canvas = fig2d.canvas
+
+##        rgb_data = np.fromstring(canvas.tostring_rgb(),
+##                                 dtype=np.uint8, sep='')
+##        rgb_data = rgb_data.reshape(canvas.get_width_height()[::-1] + (3,))
+
+        
         self.cid = fig2d.canvas.mpl_connect('button_press_event',
                                        lambda event: self.on_click(event,
                                                                    df_reference))
@@ -128,7 +136,7 @@ class AFMPlot:
 
     def on_figclose(self, event, fig):
         fig.canvas.mpl_disconnect(self.cid)
-        self.jpk_anal.data_zip.close() #CHECK THIS
+##        self.jpk_anal.data_zip.close() #CHECK THIS
         
     def on_click(self, event, df_ref):
         print('click')
@@ -146,19 +154,19 @@ class AFMPlot:
             mode = 'Force-distance'
             fd_data = self.jpk_anal
             segment_path_old = fd_data.segment_path
-            anal_dict_old = fd_data.anal_dict.copy()
+##            anal_dict_old = fd_data.anal_dict.copy()
             fd_data.clear_output(mode) #clear previous data
             fd_data.segment_path = segment_path
-            fd_data.anal_dict = fd_data.ANALYSIS_MODE_DICT[mode].copy()
+##            fd_data.anal_dict = fd_data.ANALYSIS_MODE_DICT[mode].copy()
 ##            print('old')
 ##            print(mode_dict_old)
-            fd_data.get_data()
+            fd_data.get_data([mode])
             
             #fd_data = JPKAnalyze(self.file_path, mode, segment_path)
             plot_params = fd_data.ANALYSIS_MODE_DICT[mode]['plot_parameters']
 
             label_text = f'x={"{:.2e}".format(col)}, y={"{:.2e}".format(ind)}'
-            self.plot_line(fd_data.df, plot_params, label_text)
+            self.plot_line(fd_data.df[mode], plot_params, label_text)
 
             #legend remove duplicates
             handles, labels = self.ax_fd.get_legend_handles_labels()            
@@ -169,43 +177,44 @@ class AFMPlot:
 
             #CHECK
             fd_data.segment_path = None
-            fd_data.anal_dict = anal_dict_old
+##            fd_data.anal_dict = anal_dict_old
 
             self.fig_fd.show()
 
-    def plot_2dfit(self, df, plot_params, fit_output):
+    def plot_2dfit(self, df, plot_params):
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
         z_raw = f'{z}_raw'
         z_fit = f'{z}_fit'
 
-        color_limits = [df[z_raw].min(), df[z_raw].max()]
-        title_text = ', '.join([f'{k}' + '={:.1e}'.format(v) \
-                                for k, v in fit_output.items()])
+##        color_limits = [df[z_raw].min(), df[z_raw].max()]
+##        title_text = ', '.join([f'{k}' + '={:.1e}'.format(v) \
+##                                for k, v in fit_output.items()])
+        title_text = 'Fitting result'
 
         #data reshape
-        df_raw_matrix = df.pivot_table(values=z_raw, index=y, columns=x,
+        df_raw = df.pivot_table(values=z_raw, index=y, columns=x,
                                        aggfunc='first')
-        df_filtered = df.query(f'{z_fit}>={color_limits[0]}')
-        df_fit_matrix = df_filtered.pivot_table(values=z_fit, index=y,
-                                                columns=x, aggfunc='first')
+##        df_filtered = df.query(f'{z_fit}>={color_limits[0]}')
+        df_fit = df.pivot_table(values=z_fit, index=y,
+                                           columns=x, aggfunc='first')
 
         #plot
         fig = go.Figure()
         fig.add_trace(go.Surface(name='Raw',
-                                 z=df_raw_matrix,
-                                 x=df_raw_matrix.columns,
-                                 y=df_raw_matrix.index,
+                                 z=df_raw,
+                                 x=df_raw.columns,
+                                 y=df_raw.index,
                                  opacity=0.5,
                                  colorscale ='Greens',
                                  reversescale=True,
                                  showlegend=True,
                                  showscale=False))
         fig.add_trace(go.Surface(name='Fit',
-                                 z=df_fit_matrix,
-                                 x=df_fit_matrix.columns,
-                                 y=df_fit_matrix.index,
+                                 z=df_fit,
+                                 x=df_fit.columns,
+                                 y=df_fit.index,
                                  opacity=0.5,
                                  colorscale ='Reds',
                                  reversescale=True,

@@ -15,7 +15,7 @@ class JPKAnalyze(JPKRead):
     #mapping of keys in header files which depend on file format
     FORMAT_KEY_DICT = {'jpk-qi-data': {'position': 'position'},
                        'jpk-force': {'position': 'start-position'}}
-    def __init__(self, file_path, mode, segment_path):
+    def __init__(self, file_path, segment_path):
         #Make sure variable keys in result dict of 'function' definition
         #is same as 'output' keys of below
         self.ANALYSIS_MODE_DICT = {'Adhesion': {'function': self.get_adhesion,
@@ -25,7 +25,7 @@ class JPKAnalyze(JPKRead):
                                                                     'y': 'Y',
                                                                     'z': 'Adhesion',
                                                                     'title': 'Adhesion',
-                                                                    'type': ['2d', '3d']}
+                                                                    'type': ['2d']}
                                                 },
                                    'Snap-in distance': {'function': self.get_snapin_distance,
                                                         'output': {'Height': [],
@@ -34,7 +34,7 @@ class JPKAnalyze(JPKRead):
                                                         'plot_parameters': {'x': 'X',
                                                                             'y': 'Y',
                                                                             'z': 'Height',
-                                                                            'title': 'Snap-in distance',
+                                                                            'title': 'Jump-in distance',
                                                                             'type': ['2d']}
                                                         },
                                    'Force-distance': {'function': self.get_force_distance,
@@ -51,7 +51,7 @@ class JPKAnalyze(JPKRead):
                                                       }
                                    }
         #initialize JPKRead and get data
-        super().__init__(file_path, self.ANALYSIS_MODE_DICT[mode],
+        super().__init__(file_path, self.ANALYSIS_MODE_DICT,
                          segment_path)
 
     #clear output data in ANALYSIS_MODE_DICT
@@ -93,7 +93,9 @@ class JPKAnalyze(JPKRead):
                                        extend_dir)
 
         #calculate snapin distance
-        idx_min = np.argmin(force_data) #minimum force during extend
+        force_sobel = ndimage.sobel(force_data) #sobel transform
+        idx_min = np.argmin(force_sobel)
+##        idx_min = np.argmin(force_data) #minimum force during extend
         #tolerance method to get jumpin distance
 ##        zero_points = 10
 ##        zero_force = statistics.median(force_data[:zero_points])
@@ -112,10 +114,10 @@ class JPKAnalyze(JPKRead):
         #print(idx_min)
         snapin_distance = height_data[idx_min] - height_data[-1]
         #TODO: define as fraction of extend distance range
-##        total_distance = height_data[0] - height_data[-1]
-##        tolerence = 0.8
-##        snapin_distance = 0 if snapin_distance >= tolerence * total_distance \
-##                          else snapin_distance
+        total_distance = height_data[0] - height_data[-1]
+        tolerence = 0.8
+        snapin_distance = 0 if snapin_distance >= tolerence * total_distance \
+                          else snapin_distance
 
         #get position
         x_pos, y_pos = self.get_xypos(segment_header_dict)
@@ -164,40 +166,53 @@ class JPKAnalyze(JPKRead):
     
 
 class DataFit:
-    def __init__(self, jpk_anal, afm_plot, func, filter_string,
+    def __init__(self, jpk_anal, afm_plot, func, coords,
                  guess=None, bounds=(-np.inf, np.inf)):
         FIT_DICT = {'Sphere-RC': {'function': self.sphere_rc,
                                   'params': 'R,c'
                                   }
                     } #'func' arg keys and params
-        df_filt = jpk_anal.df.query(filter_string)
-        plot_params =  jpk_anal.anal_dict['plot_parameters']
+##        df_filt = jpk_anal.df.query(filter_string)
+        mode = 'Snap-in distance'
+        plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
-        data = np.array([[df_filt[x][i],
-                          df_filt[y][i],
-                          df_filt[z][i]] for i in df_filt.index])
+        df_data =  jpk_anal.df[mode].pivot_table(values=z, index=y, columns=x,
+                                                      aggfunc='first')
+        self.fit_output = {}
+        self.fit_data_full = pd.DataFrame()
+        for key, val in coords.items():
+            data = np.array([[df_data.columns[coord[0]],
+                             df_data.index[coord[1]],
+                             df_data.iloc[coord[0], coord[1]]] for coord in val])
+##        data = np.array([[df_filt[x][i],
+##                          df_filt[y][i],
+##                          df_filt[z][i]] for i in df_filt.index])
 
-        #fit
-        popt, _ = curve_fit(FIT_DICT[func]['function'], data, data[:,2],
-                            p0=guess, bounds=bounds)
+            #fit
+            popt, _ = curve_fit(FIT_DICT[func]['function'], data, data[:,2],
+                                p0=guess, bounds=bounds)
 
-        self.fit_output = dict(zip(FIT_DICT[func]['params'].split(','), popt))
+            self.fit_output[key] = dict(zip(FIT_DICT[func]['params'].split(','), popt))
+            
+            #get fitted data
+##            data_full = np.array([[jpk_anal.df[mode][x][i],
+##                                   jpk_anal.df[mode][y][i],
+##                                   jpk_anal.df[mode][z][i]] for i in jpk_anal.df[mode].index])
+
+            z_fit = FIT_DICT[func]['function'](data, *popt)
+            fit_data = pd.DataFrame({x: data[:,0],
+                                     y: data[:,1],
+                                     f'{z}_raw': data[:,2],
+                                     f'{z}_fit': z_fit})
+            fit_data['label'] = key
+            self.fit_data_full = self.fit_data_full.append(fit_data)
+            self.z_max = z_fit.max() #maximum fitted z
+
         print(f'Fit output {func}:', self.fit_output)
-        #get fitted data
-        data_full = np.array([[jpk_anal.df[x][i],
-                               jpk_anal.df[y][i],
-                               jpk_anal.df[z][i]] for i in jpk_anal.df.index])
-
-        z_fit = FIT_DICT[func]['function'](data_full, *popt)
-        self.fit_data = pd.DataFrame({x: data_full[:,0],
-                                      y: data_full[:,1],
-                                      f'{z}_raw': data_full[:,2],
-                                      f'{z}_fit': z_fit})
-        self.z_max = z_fit.max() #maximum fitted z
         #plot
-        afm_plot.plot_2dfit(self.fit_data, plot_params, self.fit_output)
+        afm_plot.plot_2dfit(self.fit_data_full, plot_params)
 
     def sphere_rc(self, X, R, C): #sphere function (only R and C)
         i, j, k = np.argmax(X, axis=0)
@@ -207,13 +222,13 @@ class DataFit:
 
 #analyze processed data from JPKRead
 class DataAnalyze:
-    def __init__(self, jpk_anal):
-        self.plot_params =  jpk_anal.anal_dict['plot_parameters']        
-        self.df = jpk_anal.df.copy()
+    def __init__(self, jpk_anal, mode):
+        self.plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']        
+        self.df = jpk_anal.df[mode].copy()
 
     #K-means cluster Z data
     def get_kmeans(self, n_clusters=2):
-        kmeans = KMeans(n_clusters=2)
+        kmeans = KMeans(n_clusters=n_clusters)
         data = np.array(self.df[self.plot_params['z']]).reshape(-1,1)
         k_fit = kmeans.fit(data)
         return k_fit.cluster_centers_.flatten()
@@ -282,3 +297,89 @@ class DataAnalyze:
     def get_contact_radius(self, fit_out, zero):
         return (fit_out['R']**2 - (zero-fit_out['c'])**2)**0.5
     
+from skimage.filters import sobel
+from skimage import segmentation
+from skimage.color import label2rgb
+from skimage.exposure import histogram
+from skimage.measure import regionprops
+from scipy import ndimage as ndi
+from matplotlib import pyplot as plt
+import matplotlib.patches as mpatches
+
+class ImageAnalyze:
+    def __init__(self, jpk_anal, mode):
+##        mode = 'Adhesion'
+        plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
+        x = plot_params['x']
+        y = plot_params['y']
+        z = plot_params['z']        
+        self.im_data =  jpk_anal.df[mode].pivot_table(values=z, index=y, columns=x,
+                                                      aggfunc='first').to_numpy()
+##        self.jpk_anal = jpk_anal
+        
+    def segment_image(self, bg, fg):        
+        self.im_sobel = sobel(self.im_data)
+        self.markers = np.zeros_like(self.im_data)
+        #set background
+        self.markers[np.logical_and(self.im_data > bg[0],
+                                    self.im_data < bg[1])] = 1
+        #set foreground
+        self.markers[np.logical_and(self.im_data > fg[0],
+                                    self.im_data < fg[1])] = 2
+        self.im_segment = segmentation.watershed(self.im_sobel, self.markers)
+        
+        im_segment2 = ndi.binary_fill_holes(self.im_segment - 1)
+        self.im_labelled, _ = ndi.label(im_segment2)
+        masked = np.ma.masked_where(self.im_labelled == 0,
+                                    self.im_labelled)
+        
+        fig = plt.figure('Segments')
+        ax = fig.add_subplot(111)
+        ax.imshow(self.im_data, cmap='afmhot')
+        ax.imshow(masked, cmap='rainbow')
+
+        self.bbox = {}
+        self.coords = {}
+        for region in regionprops(self.im_labelled):
+##            # take regions with large enough areas
+##            if region.area >= 100:
+                # draw rectangle around segmented coins
+            minr, minc, maxr, maxc = region.bbox
+            self.bbox[region.label] = [minr, minc, maxr, maxc]
+            self.coords[region.label] = region.coords
+            rect = mpatches.Rectangle((minc, minr), maxc - minc, maxr - minr,
+                                      fill=False, edgecolor='red', linewidth=2)
+            ax.add_patch(rect)
+        
+        ax.invert_yaxis()
+        plt.show(block=False)
+
+    def show_histogram(self):
+        hist, hist_centers = histogram(self.im_data)
+        fig = plt.figure('Histogram')
+        ax = fig.add_subplot(111)
+        ax.plot(hist_centers, hist, lw=2)
+        plt.show(block=False)
+
+##    def check_plot(self):
+##        mode = 'Snap-in distance'
+##        df = self.jpk_anal.df[mode]
+##        plot_params =  self.jpk_anal.anal_dict[mode]['plot_parameters']
+##        x = plot_params['x']
+##        y = plot_params['y']
+##        z = plot_params['z']        
+##        df_data =  self.jpk_anal.df[mode].pivot_table(values=z, index=y, columns=x,
+##                                                      aggfunc='first')
+##        for key, val in self.bbox.items():
+##            df_data_filter = df_data.iloc[val[0]:val[2], val[1]:val[3]]
+##            fig2d = plt.figure(f'label {key}')
+##            ax2d = fig2d.add_subplot(111)
+##            im2d = ax2d.pcolormesh(df_data_filter.columns, df_data_filter.index,
+##                                   df_data_filter, cmap='afmhot')
+##            plt.show(block=False)
+
+##        for key, val in self.coords.items():
+##            data = np.array([df_data.columns[coord[0]],
+##                             df_data.index[coord[1]],
+##                             df_data.iloc[*coord]] for coord in val])
+        
