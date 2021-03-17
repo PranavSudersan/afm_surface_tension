@@ -2,10 +2,14 @@
 from afm_analyze import JPKAnalyze, DataFit, DataAnalyze, ImageAnalyze
 from afm_plot import AFMPlot
 import sys
+from PyQt5.QtWidgets import QApplication, QFileDialog
+
+app = QApplication(sys.argv)
+file_path, _ = QFileDialog.getOpenFileName()
 
 ##mode = 'Adhesion' #'Snap-in distance', 'Adhesion' 'Force-distance'
 ##file_path = 'data/force-save-2021.01.08-17.24.07.418.jpk-force'
-file_path = 'data/drops-data-2021.01.08-17.17.02.956.jpk-qi-data'
+##file_path = 'data/drops-data-2021.01.08-17.17.02.956.jpk-qi-data'
 ##file_path = '../20210221_glycerin drop/qi-drop6-full2-data-2021.02.21-21.56.03.718.jpk-qi-data'
 ##file_path = '../20210227_silicone oil/qi-area6-data-2021.02.27-19.40.31.051.jpk-qi-data'
 
