@@ -166,13 +166,15 @@ class JPKAnalyze(JPKRead):
     
 
 class DataFit:
-    def __init__(self, jpk_anal, afm_plot, func, coords,
+    def __init__(self, jpk_anal, afm_plot, func, img_anal,
                  guess=None, bounds=(-np.inf, np.inf)):
         FIT_DICT = {'Sphere-RC': {'function': self.sphere_rc,
                                   'params': 'R,c'
                                   }
                     } #'func' arg keys and params
 ##        df_filt = jpk_anal.df.query(filter_string)
+        coords = img_anal.coords
+        bbox = img_anal.bbox
         mode = 'Snap-in distance'
         plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
         x = plot_params['x']
@@ -189,28 +191,31 @@ class DataFit:
 ##        data = np.array([[df_filt[x][i],
 ##                          df_filt[y][i],
 ##                          df_filt[z][i]] for i in df_filt.index])
+            if len(data) > 3:
+##                R_guess = min(map(abs,[bbox[key][0]-bbox[key][2],
+##                                       bbox[key][1]-bbox[key][3]]))/2
+##                guess = [R_guess, -R_guess]
+                #fit
+                popt, _ = curve_fit(FIT_DICT[func]['function'], data, data[:,2],
+                                    p0=guess, bounds=bounds)
 
-            #fit
-            popt, _ = curve_fit(FIT_DICT[func]['function'], data, data[:,2],
-                                p0=guess, bounds=bounds)
+                self.fit_output[key] = dict(zip(FIT_DICT[func]['params'].split(','), popt))
+                
+                #get fitted data
+    ##            data_full = np.array([[jpk_anal.df[mode][x][i],
+    ##                                   jpk_anal.df[mode][y][i],
+    ##                                   jpk_anal.df[mode][z][i]] for i in jpk_anal.df[mode].index])
 
-            self.fit_output[key] = dict(zip(FIT_DICT[func]['params'].split(','), popt))
-            
-            #get fitted data
-##            data_full = np.array([[jpk_anal.df[mode][x][i],
-##                                   jpk_anal.df[mode][y][i],
-##                                   jpk_anal.df[mode][z][i]] for i in jpk_anal.df[mode].index])
+                z_fit = FIT_DICT[func]['function'](data, *popt)
+                fit_data = pd.DataFrame({x: data[:,0],
+                                         y: data[:,1],
+                                         f'{z}_raw': data[:,2],
+                                         f'{z}_fit': z_fit})
+                fit_data['label'] = key
+                self.fit_data_full = self.fit_data_full.append(fit_data)
+                self.fit_output[key]['z_max'] = z_fit.max() #maximum fitted z
 
-            z_fit = FIT_DICT[func]['function'](data, *popt)
-            fit_data = pd.DataFrame({x: data[:,0],
-                                     y: data[:,1],
-                                     f'{z}_raw': data[:,2],
-                                     f'{z}_fit': z_fit})
-            fit_data['label'] = key
-            self.fit_data_full = self.fit_data_full.append(fit_data)
-            self.z_max = z_fit.max() #maximum fitted z
-
-        print(f'Fit output {func}:', self.fit_output)
+##        print(f'Fit output {func}:', self.fit_output)
         #plot
         afm_plot.plot_2dfit(self.fit_data_full, plot_params)
 
@@ -296,6 +301,18 @@ class DataAnalyze:
 
     def get_contact_radius(self, fit_out, zero):
         return (fit_out['R']**2 - (zero-fit_out['c'])**2)**0.5
+
+    def get_max_adhesion(self, jpk_anal, mode, coord_val): #find maximum adhesion within region
+        plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
+        x = plot_params['x']
+        y = plot_params['y']
+        z = plot_params['z']
+        #TODO: clean it, change to query, avoid pivot
+        df_adh =  jpk_anal.df[mode].pivot_table(values=z, index=y, columns=x,
+                                                aggfunc='first')
+        return max([df_adh.iloc[coord[0], coord[1]] for coord in coord_val])
+        
+        
     
 from skimage.filters import sobel
 from skimage import segmentation

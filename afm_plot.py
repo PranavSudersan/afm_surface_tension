@@ -220,6 +220,8 @@ class AFMPlot:
                                  reversescale=True,
                                  showlegend=True,
                                  showscale=False))
+##        z_range = [df_raw.min().min(),2*df_raw.max().max()]
+##        print(z_range)
         fig.update_layout(title=title_text,
                           scene = dict(xaxis_title=x,
                                        yaxis_title=y,
