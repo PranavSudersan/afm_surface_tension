@@ -3,6 +3,7 @@ from afm_analyze import JPKAnalyze, DataFit, DataAnalyze, ImageAnalyze
 from afm_plot import AFMPlot
 import sys
 import pandas as pd
+import numpy as np
 from PyQt5.QtWidgets import QApplication, QFileDialog
 
 ##app = QApplication(sys.argv)
@@ -11,7 +12,7 @@ from PyQt5.QtWidgets import QApplication, QFileDialog
 ##mode = 'Adhesion' #'Snap-in distance', 'Adhesion' 'Force-distance'
 ##file_path = 'data/force-save-2021.01.08-17.24.07.418.jpk-force'
 ##file_path = 'data/drops-data-2021.01.08-17.17.02.956.jpk-qi-data'
-file_path = 'data/qi-petri-dish-data-2021.03.21-20.56.05.320.jpk-qi-data'
+file_path = '../20210321 silicone oil fluorinated tip/qi-petri-dish-data-2021.03.21-23.28.09.998.jpk-qi-data'
 ##file_path = '../20210221_glycerin drop/qi-drop6-full2-data-2021.02.21-21.56.03.718.jpk-qi-data'
 ##file_path = '../20210227_silicone oil/qi-area6-data-2021.02.27-19.40.31.051.jpk-qi-data'
 
@@ -43,8 +44,10 @@ img_anal.segment_image(bg=[-1e10,clusters.min()],
 ##                       fg=[3e-7, 4e-7])
 
 ###fit data
-data_fit = DataFit(jpk_data, afm_plot, 'Sphere-RC', img_anal,#"Height>=0.5e-7",
-                   guess=[1e-5,-1e-5])
+data_fit = DataFit(jpk_data, afm_plot, 'Sphere-RC', img_anal,
+                   zero = zero_height)#,"Height>=0.5e-7",
+                   #guess=[1.5e-5,-1e-5],bounds=([1e-6,-np.inf],[1e-4,np.inf]),
+                   
 
 #output params
 output_dict = {'Label': [], 'Curvature':[], 'Contact Radius': [],

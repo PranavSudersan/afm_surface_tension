@@ -181,7 +181,7 @@ class AFMPlot:
 
             self.fig_fd.show()
 
-    def plot_2dfit(self, df, plot_params):
+    def plot_2dfit(self, fit_data, df_raw, plot_params):
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
@@ -194,15 +194,16 @@ class AFMPlot:
         title_text = 'Fitting result'
 
         #data reshape
-        df_raw = df.pivot_table(values=z_raw, index=y, columns=x,
-                                       aggfunc='first')
+##        df_raw = df.pivot_table(values=z_raw, index=y, columns=x,
+##                                       aggfunc='first')
 ##        df_filtered = df.query(f'{z_fit}>={color_limits[0]}')
-        df_fit = df.pivot_table(values=z_fit, index=y,
-                                           columns=x, aggfunc='first')
+##        df_fit = fit_data.pivot_table(values=z_fit, index=y,
+##                                           columns=x, aggfunc='first')
 
         #plot
         fig = go.Figure()
-        fig.add_trace(go.Surface(name='Raw',
+        fig.add_trace(go.Surface(legendgroup="Raw",
+                                 name='Raw',
                                  z=df_raw,
                                  x=df_raw.columns,
                                  y=df_raw.index,
@@ -211,21 +212,30 @@ class AFMPlot:
                                  reversescale=True,
                                  showlegend=True,
                                  showscale=False))
-        fig.add_trace(go.Surface(name='Fit',
-                                 z=df_fit,
-                                 x=df_fit.columns,
-                                 y=df_fit.index,
-                                 opacity=0.5,
-                                 colorscale ='Reds',
-                                 reversescale=True,
-                                 showlegend=True,
-                                 showscale=False))
-##        z_range = [df_raw.min().min(),2*df_raw.max().max()]
+        i = 0
+        for key, val in fit_data.items():
+##            print(key)
+            leg = True if i==0 else False
+            fig.add_trace(go.Surface(legendgroup="Fit",
+                                     name='Fit',
+                                     z=val[z],#df_fit,
+                                     x=val[x],#df_fit.columns,
+                                     y=val[y],#df_fit.index,
+                                     opacity=0.5,
+                                     colorscale ='Reds',
+                                     reversescale=True,
+                                     showlegend=leg,
+                                     showscale=False))
+            i = 1
+
+        z_range = [df_raw.min().min(),3*df_raw.max().max()]
 ##        print(z_range)
         fig.update_layout(title=title_text,
                           scene = dict(xaxis_title=x,
                                        yaxis_title=y,
-                                       zaxis_title=z),
+                                       zaxis_title=z,
+                                       zaxis=dict(range=z_range)
+                                       ),
                           autosize=True)
         self.plotwin  = PlotlyViewer(fig)
             

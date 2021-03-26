@@ -167,7 +167,7 @@ class JPKAnalyze(JPKRead):
 
 class DataFit:
     def __init__(self, jpk_anal, afm_plot, func, img_anal,
-                 guess=None, bounds=(-np.inf, np.inf)):
+                 guess=None, bounds=(-np.inf, np.inf), zero=0):
         FIT_DICT = {'Sphere-RC': {'function': self.sphere_rc,
                                   'params': 'R,c'
                                   }
@@ -183,47 +183,80 @@ class DataFit:
         df_data =  jpk_anal.df[mode].pivot_table(values=z, index=y, columns=x,
                                                       aggfunc='first')
         self.fit_output = {}
-        self.fit_data_full = pd.DataFrame()
+        self.fit_data_full = {}#pd.DataFrame()
+        num_fit = 20 #number of points in fit
         for key, val in coords.items():
-            data = np.array([[df_data.columns[coord[0]],
-                             df_data.index[coord[1]],
+            data = np.array([[df_data.columns[coord[1]],
+                             df_data.index[coord[0]],
                              df_data.iloc[coord[0], coord[1]]] for coord in val])
 ##        data = np.array([[df_filt[x][i],
 ##                          df_filt[y][i],
 ##                          df_filt[z][i]] for i in df_filt.index])
             if len(data) > 3:
+                x_start  = min([bbox[key][0],bbox[key][2]])
+                x_end = max([bbox[key][0],bbox[key][2]])                
+                y_start  = min([bbox[key][1],bbox[key][3]])
+                y_end = max([bbox[key][1],bbox[key][3]])                
+                
+                #TODO: get below directly from sphere_rc function
+                i, j, k = np.argmax(data, axis=0)
+                a, b, c = data[k, 0], data[k, 1], data[k, 2]
+
+                base_r = min([x_end-x_start, y_end-y_start])/2
+                h_max = c-zero
+                #https://mathworld.wolfram.com/SphericalCap.html
+                R_guess = (base_r**2 + h_max**2)/(2*h_max)                
+                
 ##                R_guess = min(map(abs,[bbox[key][0]-bbox[key][2],
-##                                       bbox[key][1]-bbox[key][3]]))/2
-##                guess = [R_guess, -R_guess]
+##                                       bbox[key][1]-bbox[key][3]]))
+                guess = [R_guess, -R_guess]
                 #fit
                 popt, _ = curve_fit(FIT_DICT[func]['function'], data, data[:,2],
                                     p0=guess, bounds=bounds)
-
-                self.fit_output[key] = dict(zip(FIT_DICT[func]['params'].split(','), popt))
                 
+                self.fit_output[key] = dict(zip(FIT_DICT[func]['params'].split(','), popt))
+##                print(key, popt, R_guess, c, h_max)
                 #get fitted data
     ##            data_full = np.array([[jpk_anal.df[mode][x][i],
     ##                                   jpk_anal.df[mode][y][i],
     ##                                   jpk_anal.df[mode][z][i]] for i in jpk_anal.df[mode].index])
-
-                z_fit = FIT_DICT[func]['function'](data, *popt)
-                fit_data = pd.DataFrame({x: data[:,0],
-                                         y: data[:,1],
-                                         f'{z}_raw': data[:,2],
-                                         f'{z}_fit': z_fit})
-                fit_data['label'] = key
-                self.fit_data_full = self.fit_data_full.append(fit_data)
+                
+                
+##                x_step = (x_end-x_start)/num_fit
+##                y_step = (y_end-y_start)/num_fit
+##                print(bbox[key])
+                #TODO: change range to points where drop meets surface
+                x_fit, y_fit = np.mgrid[x_start:x_end:complex(0,num_fit),
+                                        y_start:y_end:complex(0,num_fit)]
+##                print(x_fit.shape, y_fit.shape)
+##                print(a, 0.5*(x_start+x_end), b, 0.5*(y_start+y_end))
+                z_fit = popt[1] + (abs((popt[0]**2)-((x_fit-a)**2)-((y_fit-b)**2)))**0.5
+##                print('max', z_fit.max(), data[k, 2])
+##                z_fit = FIT_DICT[func]['function'](data, *popt)
+##                fit_data = pd.DataFrame({x: x_fit.flatten(),
+##                                         y: y_fit.flatten(),
+####                                         f'{z}_raw': data[:,2],
+##                                         f'{z}_fit': z_fit.flatten()})
+                fit_data = {x: x_fit, y: y_fit, z: z_fit}
+##                fit_data['label'] = key
+##                self.fit_data_full = self.fit_data_full.append(fit_data)
+                self.fit_data_full[key] = fit_data
                 self.fit_output[key]['z_max'] = z_fit.max() #maximum fitted z
 
 ##        print(f'Fit output {func}:', self.fit_output)
+        #zero height plane
+        x_zero, y_zero = np.mgrid[min(df_data.columns):max(df_data.columns):complex(0,num_fit),
+                                  min(df_data.index):max(df_data.index):complex(0,num_fit)]
+        z_zero = 0*x_zero + zero
+        self.fit_data_full['zero'] = {x: x_zero, y: y_zero, z: z_zero}
         #plot
-        afm_plot.plot_2dfit(self.fit_data_full, plot_params)
+        afm_plot.plot_2dfit(self.fit_data_full, df_data, plot_params)
 
     def sphere_rc(self, X, R, C): #sphere function (only R and C)
         i, j, k = np.argmax(X, axis=0)
         a, b = X[k, 0], X[k, 1]
         x, y, z = X.T
-        return C + ((R**2)-((x-a)**2)-((y-b)**2))**0.5
+        return C + (abs((R**2)-((x-a)**2)-((y-b)**2)))**0.5
 
 #analyze processed data from JPKRead
 class DataAnalyze:
@@ -329,9 +362,10 @@ class ImageAnalyze:
         plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
         x = plot_params['x']
         y = plot_params['y']
-        z = plot_params['z']        
-        self.im_data =  jpk_anal.df[mode].pivot_table(values=z, index=y, columns=x,
-                                                      aggfunc='first').to_numpy()
+        z = plot_params['z']
+        self.im_df =  jpk_anal.df[mode].pivot_table(values=z, index=y, columns=x,
+                                                      aggfunc='first')
+        self.im_data =  self.im_df.to_numpy()
 ##        self.jpk_anal = jpk_anal
         
     def segment_image(self, bg, fg):        
@@ -341,6 +375,7 @@ class ImageAnalyze:
         self.markers[np.logical_and(self.im_data > bg[0],
                                     self.im_data < bg[1])] = 1
         #set foreground
+        #TODO: improve segmentation to detect smaller drops as well
         self.markers[np.logical_and(self.im_data > fg[0],
                                     self.im_data < fg[1])] = 2
         self.im_segment = segmentation.watershed(self.im_sobel, self.markers)
@@ -362,10 +397,13 @@ class ImageAnalyze:
 ##            if region.area >= 100:
                 # draw rectangle around segmented coins
             minr, minc, maxr, maxc = region.bbox
-            self.bbox[region.label] = [minr, minc, maxr, maxc]
+            self.bbox[region.label] = [self.im_df.columns[minc],
+                                       self.im_df.index[minr],
+                                       self.im_df.columns[maxc-1],
+                                       self.im_df.index[maxr-1]]
             self.coords[region.label] = region.coords
             rect = mpatches.Rectangle((minc, minr), maxc - minc, maxr - minr,
-                                      fill=False, edgecolor='red', linewidth=2)
+                                      fill=False, edgecolor='white', linewidth=1)
             ax.add_patch(rect)
         
         ax.invert_yaxis()
