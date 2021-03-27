@@ -228,13 +228,14 @@ class AFMPlot:
                                      showscale=False))
             i = 1
 
-        z_range = [df_raw.min().min(),3*df_raw.max().max()]
+        z_range = [df_raw.min().min(),1.2*df_raw.max().max()]
 ##        print(z_range)
         fig.update_layout(title=title_text,
                           scene = dict(xaxis_title=x,
                                        yaxis_title=y,
                                        zaxis_title=z,
-                                       zaxis=dict(range=z_range)
+                                       zaxis=dict(range=z_range),
+                                       aspectratio={"x": 1, "y": 1, "z": 0.4}
                                        ),
                           autosize=True)
         self.plotwin  = PlotlyViewer(fig)

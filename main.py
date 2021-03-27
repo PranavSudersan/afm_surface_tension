@@ -71,7 +71,32 @@ for key in data_fit.fit_output.keys():
     output_dict['Max Adhesion'].append(f_max)
 
 output_df = pd.DataFrame(output_dict)
-##output_df.to_excel('out.xlsx')
+output_df['s'] = ((3*output_df['Volume'])/(4*np.pi))**(1/3)
+output_df['R/s'] = output_df['Contact Radius']/output_df['s']
+
+#import simulation data
+simu_filepath = 'E:/Work/Surface Evolver/afm_pyramid/data/20210325_nps/height=0/'\
+                'data-CA_p30-h 0-Rsi1.5_Rsf3.5.txt'
+simu_df = pd.read_csv(simu_filepath,delimiter='\t')
+simu_df['ys/F'] = -1/(2*np.pi*simu_df['Force_Calc']) #inverse
+
+#3rd order polynomial fit of Force-Contact radius data
+fr_fit = np.polyfit(simu_df['Contact_Radius'], simu_df['ys/F'], 3)
+
+output_df['ys/F'] = np.polyval(fr_fit,output_df['R/s'])
+
+#surface tension in mN/m
+output_df['Surface Tension (mN)'] = 1000*output_df['ys/F']*output_df['Max Adhesion']/\
+                               output_df['s']
+
+#miscellaneous data
+output_df['Simulation contact angle'] = simu_df['Top_Angle'][0]
+output_df['Simulation file'] = simu_filepath
+output_df['AFM file'] = file_path
+
+#save final output
+file_name = file_path.split('/')[-1][:-len(jpk_data.file_format)-1]
+output_df.to_excel(f'{file_name}-output.xlsx', index=None)
 
 
 #jpk_data.data_zip.close()

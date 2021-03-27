@@ -405,6 +405,7 @@ class ImageAnalyze:
             rect = mpatches.Rectangle((minc, minr), maxc - minc, maxr - minr,
                                       fill=False, edgecolor='white', linewidth=1)
             ax.add_patch(rect)
+            ax.text(minc,minr,str(region.label),color='white',fontsize=12)
         
         ax.invert_yaxis()
         plt.show(block=False)
