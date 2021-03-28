@@ -81,9 +81,11 @@ class JPKRead:
         encod_offset = float(decode_dict['encoder']['scaling']['offset'])
         data_conv = (data_unpack * encod_multiplier) + encod_offset
         conv_list = decode_dict['conversion-set']['conversions']['list'].split(' ')
+        data_dict = {} #data dictionary of each level of converted data (eg. nominal/calibrated, distance/force)
         for conv in conv_list:
             multiplier = float(decode_dict['conversion-set']['conversion'][conv]['scaling']['multiplier'])
             offset = float(decode_dict['conversion-set']['conversion'][conv]['scaling']['offset'])
             data_conv = (data_conv * multiplier) + offset
+            data_dict[conv] = data_conv
 
-        return data_conv
+        return data_dict

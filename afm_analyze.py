@@ -39,6 +39,7 @@ class JPKAnalyze(JPKRead):
                                                         },
                                    'Force-distance': {'function': self.get_force_distance,
                                                       'output': {'Force': [],
+                                                                 'Measured height': [],
                                                                  'Distance': [],
                                                                  'Segment': [],
                                                                  'Segment folder': []},
@@ -66,7 +67,7 @@ class JPKAnalyze(JPKRead):
         segment_header_dict = self.parse_header_file(segment_header)
         #get retract force data
         force_data = self.decode_data('vDeflection', segment_header_dict,
-                                      retract_dir)
+                                      retract_dir)['force']
         #calculate adhesion
         adhesion = force_data[-1] - force_data.min()
 
@@ -87,10 +88,10 @@ class JPKAnalyze(JPKRead):
         segment_header_dict = self.parse_header_file(segment_header)
         #get extend force data
         force_data = self.decode_data('vDeflection', segment_header_dict,
-                                      extend_dir)
+                                      extend_dir)['force']
         #get extend height data
         height_data = self.decode_data('measuredHeight', segment_header_dict,
-                                       extend_dir)
+                                       extend_dir)['nominal']
 
         #calculate snapin distance
         force_sobel = ndimage.sobel(force_data) #sobel transform
@@ -131,7 +132,7 @@ class JPKAnalyze(JPKRead):
 
     def get_force_distance(self, dirpath, *args, **kwargs):
         #USE SAME KEYS AS ANALYSIS_MODE_DICT
-        result_dict = {'Force': [], 'Distance': [], 'Segment': [],
+        result_dict = {'Force': [], 'Measured height': [], 'Distance': [], 'Segment': [],
                        'Segment folder': []}
         #TODO: get segment info from header files
         segment_name = {'0': 'extend', '1': 'retract'}
@@ -143,13 +144,19 @@ class JPKAnalyze(JPKRead):
             segment_header_dict = self.parse_header_file(segment_header)
             #get segment force data
             force_data = self.decode_data('vDeflection', segment_header_dict,
-                                          segment_dir)
+                                          segment_dir)['force']
             #get segment height data
             height_data = self.decode_data('measuredHeight', segment_header_dict,
-                                           segment_dir)
-
+                                           segment_dir)['nominal']
+            #get cantilever deflection
+            defl_data = self.decode_data('vDeflection', segment_header_dict,
+                                         segment_dir)['distance']
+            #tip sample distance
+            distance_data = height_data + (defl_data-defl_data[0])
+            
             result_dict['Force'] = np.append(result_dict['Force'],force_data)
-            result_dict['Distance'] = np.append(result_dict['Distance'],height_data)            
+            result_dict['Measured height'] = np.append(result_dict['Measured height'],height_data)
+            result_dict['Distance'] = np.append(result_dict['Distance'],distance_data)
             len_data = len(force_data)
             result_dict['Segment'] = np.append(result_dict['Segment'],
                                                len_data * [seg_name])
