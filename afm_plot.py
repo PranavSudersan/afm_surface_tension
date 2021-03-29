@@ -115,14 +115,16 @@ class AFMPlot:
         if self.CLICK_STATUS == False:
             self.init_fd_plot()
             self.CLICK_STATUS = True
-        
+
         sns.lineplot(x=x, y=y, style=style,
                      data=df, ax=self.ax_fd,
-                     label = label_text)
+                     label = label_text, sort=False)
+##        self.ax_fd.plot(df[x], df[y])
         self.ax_fd.ticklabel_format(style='sci', scilimits=(0,0))
         self.ax_fd.set_xlabel(x)
         self.ax_fd.set_ylabel(y)
         self.fig_fd.suptitle(plot_params['title'])
+##        df.to_excel('test-fd-data.xlsx')
 
     def init_fd_plot(self): #initialize force-distance plot
         sns.set_theme(palette = 'Set2')

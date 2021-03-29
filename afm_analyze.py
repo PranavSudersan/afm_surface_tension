@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+from scipy import interpolate
 from scipy.optimize import curve_fit
 from scipy.interpolate import griddata
 import scipy.ndimage as ndimage
@@ -145,14 +146,14 @@ class JPKAnalyze(JPKRead):
             #get segment force data
             force_data = self.decode_data('vDeflection', segment_header_dict,
                                           segment_dir)['force']
-            #get segment height data
+            #get piezo measured height data
             height_data = self.decode_data('measuredHeight', segment_header_dict,
                                            segment_dir)['nominal']
             #get cantilever deflection
             defl_data = self.decode_data('vDeflection', segment_header_dict,
                                          segment_dir)['distance']
             #tip sample distance
-            distance_data = height_data + (defl_data-defl_data[0])
+            distance_data = height_data + (defl_data)#-defl_data[0]
             
             result_dict['Force'] = np.append(result_dict['Force'],force_data)
             result_dict['Measured height'] = np.append(result_dict['Measured height'],height_data)
@@ -270,6 +271,14 @@ class DataAnalyze:
     def __init__(self, jpk_anal, mode):
         self.plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']        
         self.df = jpk_anal.df[mode].copy()
+        
+        x = self.plot_params['x']
+        y = self.plot_params['y']
+        z = self.plot_params['z']
+        #organize data into matrix for heatmap plot
+        self.df_matrix = self.df.pivot_table(values=z,
+                                          index=y, columns=x,
+                                          aggfunc='first')
 
     #K-means cluster Z data
     def get_kmeans(self, n_clusters=2):
@@ -280,14 +289,14 @@ class DataAnalyze:
 
     #TODO: calculate volume of smoothed surface
     #calculate volume    
-    def get_volume(self, zero=0):
+    def get_volume(self, coord_vals, zero=0):
         
-        x = self.plot_params['x']
-        y = self.plot_params['y']
-        z = self.plot_params['z']
+        
+
+        
 
         #organize data into matrix for heatmap plot
-        df_filter = self.df.query(f'{z}>=1e-8')#remove zeros
+##        df_filter = self.df.query(f'{z}>=1e-8')#remove zeros
         
 ##        df_matrix = df_filter.pivot_table(values=z,
 ##                                          index=y, columns=x,
@@ -316,15 +325,52 @@ class DataAnalyze:
 ##        plt.show()
 
         
-        #organize data into matrix for heatmap plot
-        df_matrix = df_filter.pivot_table(values=z,
-                                          index=y, columns=x,
-                                          aggfunc='first')
-        df_shifted = df_matrix-zero
-        df_shifted.fillna(0, inplace=True)
-        vol = np.trapz(np.trapz(df_shifted-zero,
-                                df_shifted.columns),
-                       df_shifted.index)
+        
+
+        data = np.array([[self.df_matrix.columns[coord[1]],
+                                     self.df_matrix.index[coord[0]],
+                                     self.df_matrix.iloc[coord[0], coord[1]]] for coord in coord_vals])
+
+        data_x, data_y, data_z = data.T
+        df_coord = pd.DataFrame({'x': data_x, 'y': data_y, 'z': data_z})
+        df_coord_mat = df_coord.pivot_table(values='z',
+                                            index='y', columns='x',
+                                            aggfunc='first')
+##        print(data_x,data_y,data_z)
+##        print(data_x.shape,data_y.shape,data_z.shape)
+##        df_shifted = df_matrix-zero
+        df_coord_mat.fillna(zero, inplace=True)
+##        print(np.trapz(df_coord_mat-zero,df_coord_mat.columns))
+
+        #cubic interpolation of 2d data
+        f_inter = interpolate.interp2d(df_coord_mat.columns,
+                                       df_coord_mat.index,
+                                       df_coord_mat, kind='cubic')
+        num_interpol = 100
+        x_inter = np.linspace(min(df_coord_mat.columns),
+                              max(df_coord_mat.columns),
+                              num_interpol)
+        y_inter = np.linspace(min(df_coord_mat.index),
+                              max(df_coord_mat.index),
+                              num_interpol)
+##        print(x_inter.shape,y_inter.shape)
+##        z_inter = np.empty((num_interpol, num_interpol))
+##        print(f_inter(x_inter[0,:], y_inter[0,:]).shape, x_inter[0,:].shape, y_inter[0,:].shape)
+##        for i in range(num_interpol):
+##            for j in range(num_interpol):
+        z_inter = f_inter(x_inter, y_inter)
+##        print(x_inter.shape,y_inter.shape, z_inter.shape)
+####        print(z_inter, x_inter[:,0], y_inter[0,:])
+        
+        
+        vol = np.trapz(np.trapz(df_coord_mat-zero,
+                                df_coord_mat.columns),
+                       df_coord_mat.index)
+##        print(vol)
+        vol = np.trapz(np.trapz(z_inter-zero,
+                                x_inter),
+                       y_inter)
+##        print(vol)
         return vol
 
     #get volume and contact angle of fitted cap
@@ -336,8 +382,13 @@ class DataAnalyze:
         return h, vol, angle
 
 
-    def get_max_height(self, zero):
-        return self.df[self.plot_params['z']].max()-zero
+    def get_max_height(self, coord_vals, zero):
+        data = np.array([[self.df_matrix.columns[coord[1]],
+                                     self.df_matrix.index[coord[0]],
+                                     self.df_matrix.iloc[coord[0], coord[1]]] for coord in coord_vals])
+
+        data_x, data_y, data_z = data.T
+        return data_z.max()-zero
 
     def get_contact_radius(self, fit_out, zero):
         return (fit_out['R']**2 - (zero-fit_out['c'])**2)**0.5

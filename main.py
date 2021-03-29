@@ -7,25 +7,28 @@ import sys
 from PyQt5.QtWidgets import QApplication, QFileDialog
 import wetting
 
-app = QApplication(sys.argv)
-file_path, _ = QFileDialog.getOpenFileName()
+##app = QApplication(sys.argv)
+##file_path, _ = QFileDialog.getOpenFileName()
 
 ##mode = 'Adhesion' #'Snap-in distance', 'Adhesion' 'Force-distance'
 ##file_path = 'data/force-save-drop-2021.03.21-23.58.25.964.jpk-force'
-##file_path = 'data/drops-data-2021.01.08-17.17.02.956.jpk-qi-data'
+##file_path = 'data/qi-petri-dish-data-2021.03.21-23.46.08.230.jpk-qi-data'
+file_path = 'data/qi-petri-dish-data-2021.03.21-23.28.09.998.jpk-qi-data'
 ##file_path = '../20210321 silicone oil fluorinated tip/qi-petri-dish-data-2021.03.21-23.28.09.998.jpk-qi-data'
 ##file_path = '../20210221_glycerin drop/qi-drop6-full2-data-2021.02.21-21.56.03.718.jpk-qi-data'
 ##file_path = '../20210227_silicone oil/qi-area6-data-2021.02.27-19.40.31.051.jpk-qi-data'
 
-##simu_filepath = 'E:/Work/Surface Evolver/afm_pyramid/data/20210325_nps/height=0/'\
-##                'data-CA_p30-h 0-Rsi1.5_Rsf3.5.txt'
+drop_df, file_name = wetting.get_drop_prop(file_path)
 
-##wetting.get_surface_tension(file_path, simu_filepath)
+simu_filepath = 'E:/Work/Surface Evolver/afm_pyramid/data/20210325_nps/height=0/'\
+                'data-CA_p60-h 0-Rsi1.5_Rsf3.5.txt'
 
-simu_folderpath = 'E:/Work/Surface Evolver/afm_pyramid/data/20210325_nps/height=0/'
+wetting.get_surface_tension(drop_df, simu_filepath, file_name, False)
 
-wetting.get_contact_angle(file_path, simu_folderpath)
-
+##simu_folderpath = 'E:/Work/Surface Evolver/afm_pyramid/data/20210325_nps/height=0/'
+##
+##wetting.get_contact_angle(file_path, simu_folderpath)
+##
 ###import data
 ##jpk_data = JPKAnalyze(file_path, None)
 ##
