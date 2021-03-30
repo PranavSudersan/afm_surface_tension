@@ -200,7 +200,8 @@ class DataFit:
 ##        data = np.array([[df_filt[x][i],
 ##                          df_filt[y][i],
 ##                          df_filt[z][i]] for i in df_filt.index])
-            if len(data) > 3:
+##            print(data.shape, len(data))
+            if len(data) > 9:
                 x_start  = min([bbox[key][0],bbox[key][2]])
                 x_end = max([bbox[key][0],bbox[key][2]])                
                 y_start  = min([bbox[key][1],bbox[key][3]])
@@ -221,7 +222,8 @@ class DataFit:
                 #fit
                 popt, _ = curve_fit(FIT_DICT[func]['function'], data, data[:,2],
                                     p0=guess, bounds=bounds)
-                
+
+                #TODO: weed out bad fits
                 self.fit_output[key] = dict(zip(FIT_DICT[func]['params'].split(','), popt))
 ##                print(key, popt, R_guess, c, h_max)
                 #get fitted data
@@ -233,9 +235,16 @@ class DataFit:
 ##                x_step = (x_end-x_start)/num_fit
 ##                y_step = (y_end-y_start)/num_fit
 ##                print(bbox[key])
-                #TODO: change range to points where drop meets surface
-                x_fit, y_fit = np.mgrid[x_start:x_end:complex(0,num_fit),
-                                        y_start:y_end:complex(0,num_fit)]
+
+                h_fit = popt[0] + popt[1] - zero
+                base_r_fit = (h_fit*((2*popt[0])-h_fit))**0.5
+                self.fit_output[key]['h_fit'] = h_fit #fitted height
+                self.fit_output[key]['base_r_fit'] = base_r_fit #fitted contact radius
+                
+                x_fit, y_fit = np.mgrid[a-base_r_fit:a+base_r_fit:complex(0,num_fit),
+                                        b-base_r_fit:b+base_r_fit:complex(0,num_fit)]
+##                x_fit, y_fit = np.mgrid[x_start:x_end:complex(0,num_fit),
+##                                        y_start:y_end:complex(0,num_fit)]
 ##                print(x_fit.shape, y_fit.shape)
 ##                print(a, 0.5*(x_start+x_end), b, 0.5*(y_start+y_end))
                 z_fit = popt[1] + (abs((popt[0]**2)-((x_fit-a)**2)-((y_fit-b)**2)))**0.5
@@ -249,7 +258,7 @@ class DataFit:
 ##                fit_data['label'] = key
 ##                self.fit_data_full = self.fit_data_full.append(fit_data)
                 self.fit_data_full[key] = fit_data
-                self.fit_output[key]['z_max'] = z_fit.max() #maximum fitted z
+##                self.fit_output[key]['z_max'] = z_fit.max() #maximum fitted z
 
 ##        print(f'Fit output {func}:', self.fit_output)
         #zero height plane
@@ -287,45 +296,8 @@ class DataAnalyze:
         k_fit = kmeans.fit(data)
         return k_fit.cluster_centers_.flatten()
 
-    #TODO: calculate volume of smoothed surface
     #calculate volume    
     def get_volume(self, coord_vals, zero=0):
-        
-        
-
-        
-
-        #organize data into matrix for heatmap plot
-##        df_filter = self.df.query(f'{z}>=1e-8')#remove zeros
-        
-##        df_matrix = df_filter.pivot_table(values=z,
-##                                          index=y, columns=x,
-##                                          aggfunc='first')
-##        
-##
-##        nx, ny = len(self.df[x].unique()), len(self.df[y].unique()) #grid size
-##        grid_x, grid_y = np.mgrid[self.df[x].min():self.df[x].max():complex(0,nx),
-##                                  self.df[y].min():self.df[y].max():complex(0,ny)]
-##        
-##        
-##        #interpolate
-##        points = df_filter[[x,y]].to_numpy()
-##        values = df_filter[z]        
-##        grid_z2 = griddata(points, values, (grid_x, grid_y), method='cubic')
-##
-##        import matplotlib.pyplot as plt
-##        Z2 = ndimage.gaussian_filter(df_matrix.to_numpy(), sigma=1.0, order=0)
-##        plt.subplot(121)
-##        plt.imshow(df_matrix.to_numpy(), origin='lower')
-##        plt.plot(points[:,0], points[:,1], 'k.', ms=1)
-##        plt.title('Original')
-##        plt.subplot(122)
-##        plt.imshow(Z2, origin='lower')
-##        plt.title('Nearest')
-##        plt.show()
-
-        
-        
 
         data = np.array([[self.df_matrix.columns[coord[1]],
                                      self.df_matrix.index[coord[0]],
@@ -342,44 +314,47 @@ class DataAnalyze:
         df_coord_mat.fillna(zero, inplace=True)
 ##        print(np.trapz(df_coord_mat-zero,df_coord_mat.columns))
 
-        #cubic interpolation of 2d data
-        f_inter = interpolate.interp2d(df_coord_mat.columns,
-                                       df_coord_mat.index,
-                                       df_coord_mat, kind='cubic')
-        num_interpol = 100
-        x_inter = np.linspace(min(df_coord_mat.columns),
-                              max(df_coord_mat.columns),
-                              num_interpol)
-        y_inter = np.linspace(min(df_coord_mat.index),
-                              max(df_coord_mat.index),
-                              num_interpol)
-##        print(x_inter.shape,y_inter.shape)
-##        z_inter = np.empty((num_interpol, num_interpol))
-##        print(f_inter(x_inter[0,:], y_inter[0,:]).shape, x_inter[0,:].shape, y_inter[0,:].shape)
-##        for i in range(num_interpol):
-##            for j in range(num_interpol):
-        z_inter = f_inter(x_inter, y_inter)
-##        print(x_inter.shape,y_inter.shape, z_inter.shape)
-####        print(z_inter, x_inter[:,0], y_inter[0,:])
-        
-        
-        vol = np.trapz(np.trapz(df_coord_mat-zero,
-                                df_coord_mat.columns),
-                       df_coord_mat.index)
-##        print(vol)
-        vol = np.trapz(np.trapz(z_inter-zero,
-                                x_inter),
-                       y_inter)
-##        print(vol)
+        try:
+            #cubic interpolation of 2d data
+            f_inter = interpolate.interp2d(df_coord_mat.columns,
+                                           df_coord_mat.index,
+                                           df_coord_mat, kind='cubic')
+            num_interpol = 100
+            x_inter = np.linspace(min(df_coord_mat.columns),
+                                  max(df_coord_mat.columns),
+                                  num_interpol)
+            y_inter = np.linspace(min(df_coord_mat.index),
+                                  max(df_coord_mat.index),
+                                  num_interpol)
+    ##        print(x_inter.shape,y_inter.shape)
+    ##        z_inter = np.empty((num_interpol, num_interpol))
+    ##        print(f_inter(x_inter[0,:], y_inter[0,:]).shape, x_inter[0,:].shape, y_inter[0,:].shape)
+    ##        for i in range(num_interpol):
+    ##            for j in range(num_interpol):
+            z_inter = f_inter(x_inter, y_inter)
+    ##        print(x_inter.shape,y_inter.shape, z_inter.shape)
+    ####        print(z_inter, x_inter[:,0], y_inter[0,:])
+            
+            
+            vol = np.trapz(np.trapz(df_coord_mat-zero,
+                                    df_coord_mat.columns),
+                           df_coord_mat.index)
+    ##        print(vol)
+            vol = np.trapz(np.trapz(z_inter-zero,
+                                    x_inter),
+                           y_inter)
+        except Exception as e:
+            vol=0
+            print(e)
         return vol
 
     #get volume and contact angle of fitted cap
     #reference: https://mathworld.wolfram.com/SphericalCap.html
-    def get_cap_prop(self, R, z_max, zero):
-        h = z_max - zero #cap height
+    def get_cap_prop(self, R, h):
+##        h = z_max - zero #cap height
         vol = (1/3)*np.pi*((3*R)-h)*(h**2)
         angle = 90 - (np.arcsin((R-h)/R)*180/np.pi)
-        return h, vol, angle
+        return vol, angle
 
 
     def get_max_height(self, coord_vals, zero):
@@ -390,8 +365,8 @@ class DataAnalyze:
         data_x, data_y, data_z = data.T
         return data_z.max()-zero
 
-    def get_contact_radius(self, fit_out, zero):
-        return (fit_out['R']**2 - (zero-fit_out['c'])**2)**0.5
+##    def get_contact_radius(self, fit_out, zero):
+##        return (fit_out['R']**2 - (zero-fit_out['c'])**2)**0.5
 
     def get_max_adhesion(self, jpk_anal, mode, coord_val): #find maximum adhesion within region
         plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']

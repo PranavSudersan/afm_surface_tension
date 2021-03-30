@@ -35,8 +35,8 @@ class PlotlyViewer(QWidget):
         hbox.addWidget(self.view)
         self.show()
 
-        if exec:
-            self.app.exec_()
+##        if exec:
+##            self.app.exec_()
             #sys.exit(self.app.exec_())
 
     @pyqtSlot("QWebEngineDownloadItem*")

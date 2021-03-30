@@ -209,7 +209,7 @@ class AFMPlot:
                                  z=df_raw,
                                  x=df_raw.columns,
                                  y=df_raw.index,
-                                 opacity=0.5,
+                                 opacity=0.7,
                                  colorscale ='Greens',
                                  reversescale=True,
                                  showlegend=True,
@@ -223,25 +223,67 @@ class AFMPlot:
                                      z=val[z],#df_fit,
                                      x=val[x],#df_fit.columns,
                                      y=val[y],#df_fit.index,
-                                     opacity=0.5,
+                                     opacity=0.7,
                                      colorscale ='Reds',
                                      reversescale=True,
                                      showlegend=leg,
                                      showscale=False))
             i = 1
-
+##        fig.update_traces(contours_z=dict(show=True, usecolormap=False,
+##                                          highlightcolor="limegreen",
+##                                          project_z=True))
         z_range = [df_raw.min().min(),1.2*df_raw.max().max()]
 ##        print(z_range)
         fig.update_layout(title=title_text,
                           scene = dict(xaxis_title=x,
                                        yaxis_title=y,
                                        zaxis_title=z,
-                                       zaxis=dict(range=z_range),
+                                       xaxis=dict(ticksuffix='m'),
+                                       yaxis=dict(ticksuffix='m'),                                       
+                                       zaxis=dict(range=z_range,
+                                                  ticksuffix='m'),
                                        aspectratio={"x": 1, "y": 1, "z": 0.4}
                                        ),
                           autosize=True)
         self.plotwin  = PlotlyViewer(fig)
-            
+
+def simul_plot(simu_df):
+    sns.set_context("talk")
+    sns.set_style("ticks")
+    fig = plt.figure('Simulation data')
+    
+    ax1 = fig.add_subplot(1,2,1)
+    mk_num = len(simu_df['Top_Angle'].unique())
+    sns.lineplot(x='Contact_Radius',y='Force_Calc',hue='Top_Angle',
+                 style='Top_Angle',data=simu_df,
+                 markers=['o']*mk_num,dashes=False,
+                 legend='full',palette='flare', ax=ax1)
+    ax1.axhline(y=0, color='0.8', dashes=(1, 1), zorder=0)
+    
+    ax1.set_title('Adhesion force')
+    ax1.set_xlabel('Drop size, R/s')
+    ax1.set_ylabel(r'$F/2\pi \gamma s$')
+    leg = ax1.get_legend()
+    leg.remove()
+    
+    ax2 = fig.add_subplot(1,2,2)
+    mk_num = len(simu_df['Top_Angle'].unique())
+    sns.lineplot(x='Contact_Radius',
+                 y='Average Wetted Height',hue='Top_Angle',
+                 style='Top_Angle',data=simu_df,
+                 markers=['o']*mk_num,dashes=False,
+                 legend='full',palette='flare', ax=ax2)
+
+    ax2.set_title('Wetted length')
+    ax2.set_xlabel('Drop size, R/s')
+    ax2.set_ylabel('w/s')
+    leg = ax2.get_legend()
+    leg.set_title('Contact angle')
+    
+    plt.show(block=False)
+        
+
+        
 ##    def plot_2dfit(self, df, plot_params, fit_output):
 ##        x = plot_params['x']
 ##        y = plot_params['y']
