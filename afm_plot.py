@@ -12,7 +12,8 @@ from plotly_viewer import PlotlyViewer
 
 class AFMPlot:
     
-    def __init__(self, jpk_anal):
+    def __init__(self, jpk_anal=None):
+        
         self.plotwin = None
         #mapping plot types (from ANALYSIS_MODE_DICT) to functions
         PLOT_DICT = {'2d': self.plot_2d,
@@ -20,15 +21,16 @@ class AFMPlot:
                      'line': self.plot_line}
         self.CLICK_STATUS = False #True when clicked first and plot doesn't exist
 
-        self.jpk_anal = jpk_anal
-        self.file_path = jpk_anal.file_path
-        #plot data
-        for mode in jpk_anal.df.keys():
-            plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
-            for plot_type in plot_params['type']:
-                PLOT_DICT[plot_type](jpk_anal.df[mode], plot_params)
+        if jpk_anal != None:
+            self.jpk_anal = jpk_anal
+            self.file_path = jpk_anal.file_path
+            #plot data
+            for mode in jpk_anal.df.keys():
+                plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
+                for plot_type in plot_params['type']:
+                    PLOT_DICT[plot_type](jpk_anal.df[mode], plot_params)
 
-        plt.show(block=False)
+            plt.show(block=False)
 ##        plt.pause(0.05)
 ##        if self.plotwin != None:
 ####            self.plotwin.show()

@@ -110,7 +110,7 @@ def get_surface_tension(output_df, simu_df, contact_angle,
     
     #save final output
     if save == True:                    
-        output_df.to_excel(f'{file_name}-output.xlsx', index=None)
+        output_df.to_excel(f'data/output/{file_name}-output.xlsx', index=None)
 
     return output_df
 
@@ -170,4 +170,23 @@ def combine_simul_data(simu_folderpath):
     simu_df['Simulation folder'] = simu_folderpath
     simul_plot(simu_df)
     return simu_df
+
+def combine_fd(file_paths):
+    afm_plot = AFMPlot()
+    mode = 'Force-distance'
+    for file_path in file_paths:
+        fd_data = JPKAnalyze(file_path, None)        
+        plot_params = fd_data.ANALYSIS_MODE_DICT[mode]['plot_parameters']
+        label_text = file_path.split('/')[-1].split('-')[4] #CHANGE INDEX   
+        afm_plot.plot_line(fd_data.df[mode], plot_params, label_text)
+
+    #legend remove duplicates
+    handles, labels = afm_plot.ax_fd.get_legend_handles_labels()            
+    leg_dict = dict(zip(labels[::-1],handles[::-1]))
+    afm_plot.ax_fd.get_legend().remove()
+    leg = afm_plot.ax_fd.legend(leg_dict.values(), leg_dict.keys())
+    leg.set_draggable(True, use_blit=True)
+
+    afm_plot.fig_fd.show()
+        
 #jpk_data.data_zip.close()
