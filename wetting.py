@@ -7,7 +7,7 @@ import numpy as np
 
 
 #drop volume/contact radius/contact angle
-def get_drop_prop(file_path):
+def get_drop_prop(file_path, fd_file_paths = None):
     #import data
     jpk_data = JPKAnalyze(file_path, None)
     ###analyze jpk data
@@ -29,8 +29,8 @@ def get_drop_prop(file_path):
     ##anal_adh = DataAnalyze(jpk_data, 'Adhesion')
     ##clusters_adh = anal_adh.get_kmeans(2)
     img_anal = ImageAnalyze(jpk_data, 'Snap-in distance')
-    img_anal.segment_image(bg=[-1e10,clusters.min()],
-                           fg=[clusters.max(),1e10])
+    img_anal.segment_image(bg=[-1e10,clusters[-1]],
+                           fg=[clusters[-1],1e10]) #using cutoff from clustering
     ##img_anal.segment_image(bg=[0, 1e-7],
     ##                       fg=[3e-7, 4e-7])
 
@@ -38,14 +38,22 @@ def get_drop_prop(file_path):
     data_fit = DataFit(jpk_data, afm_plot, 'Sphere-RC', img_anal,
                        zero = zero_height)#,"Height>=0.5e-7",
                        #guess=[1.5e-5,-1e-5],bounds=([1e-6,-np.inf],[1e-4,np.inf]),
-                       
 
+    
     #output params
     output_dict = {'Label': [], 'Curvature':[], 'Contact Radius': [],
                    'Max Height': [], 'Max Height raw': [],
                    'Volume': [], 'Volume raw':[],
                    'Contact angle': [], 'Max Adhesion': []}
     print('label','h','h_raw','V','V_raw')
+
+    if fd_file_paths != None:                   
+        fd_adhesion_dict = get_adhesion_from_fd(fd_file_paths, jpk_data, img_anal)
+        output_dict['Adhesion (FD)'] = []
+        output_dict['FD X position'] = []
+        output_dict['FD Y position'] = []
+        output_dict['FD file'] = []
+                
     for key in data_fit.fit_output.keys():
         curvature = data_fit.fit_output[key]['R']
 ##        contact_radius = anal_data.get_contact_radius(data_fit.fit_output[key],
@@ -72,6 +80,19 @@ def get_drop_prop(file_path):
         output_dict['Volume raw'].append(V_raw)
         output_dict['Contact angle'].append(a)
         output_dict['Max Adhesion'].append(f_max)
+
+        if fd_file_paths != None:
+            if key in fd_adhesion_dict.keys():
+                val = fd_adhesion_dict[key]
+                output_dict['Adhesion (FD)'].append(val[0])
+                output_dict['FD X position'].append(val[1])
+                output_dict['FD Y position'].append(val[2])
+                output_dict['FD file'].append(val[5])
+            else:
+                output_dict['Adhesion (FD)'].append(0)
+                output_dict['FD X position'].append(0)
+                output_dict['FD Y position'].append(0)
+                output_dict['FD file'].append('')
 
     output_df = pd.DataFrame(output_dict)
     output_df['s'] = ((3*output_df['Volume'])/(4*np.pi))**(1/3)
@@ -168,9 +189,34 @@ def combine_simul_data(simu_folderpath):
                 simu_df = simu_df.append(df_temp)
                  
     simu_df['Simulation folder'] = simu_folderpath
-    simul_plot(simu_df)
+    #simul_plot(simu_df)
     return simu_df
 
+def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal):
+    df_adh = jpk_map.df['Adhesion']
+    x_array = df_adh['X']
+    y_array = df_adh['Y']
+    data_dict = {}
+    for file_path in fd_file_paths:
+        #import data
+        jpk_data = JPKAnalyze(file_path, None)
+        df = jpk_data.df['Force-distance']
+        #find label of fd point
+        x_pos = df['X'].loc[0]
+        y_pos = df['Y'].loc[0]
+        x_real = df_adh['X'].loc[np.abs(x_array - x_pos).argmin()]
+        y_real = df_adh['Y'].loc[np.abs(y_array - y_pos).argmin()]
+        x_index = np.where(img_anal.im_df.columns == x_real)[0]
+        y_index = np.where(img_anal.im_df.index == y_real)[0]
+        label = int(img_anal.masked[y_index,x_index])
+        #get adhesion
+        force_data = df['Force'].to_numpy()
+        adhesion = force_data[-1] - force_data.min()
+        data_dict[label] = [adhesion, x_pos, y_pos, x_real, y_real, file_path]
+        
+    return data_dict
+
+    
 def combine_fd(file_paths):
     afm_plot = AFMPlot()
     mode = 'Force-distance'

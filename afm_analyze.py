@@ -42,6 +42,7 @@ class JPKAnalyze(JPKRead):
                                                       'output': {'Force': [],
                                                                  'Measured height': [],
                                                                  'Distance': [],
+                                                                 'X': [], 'Y':[],
                                                                  'Segment': [],
                                                                  'Segment folder': []},
                                                       'plot_parameters': {'x': 'Distance',
@@ -134,7 +135,7 @@ class JPKAnalyze(JPKRead):
     def get_force_distance(self, dirpath, *args, **kwargs):
         #USE SAME KEYS AS ANALYSIS_MODE_DICT
         result_dict = {'Force': [], 'Measured height': [], 'Distance': [], 'Segment': [],
-                       'Segment folder': []}
+                       'Segment folder': [], 'X': [], 'Y': []}
         #TODO: get segment info from header files
         segment_name = {'0': 'extend', '1': 'retract'}
         for seg_num, seg_name in segment_name.items():        
@@ -154,6 +155,9 @@ class JPKAnalyze(JPKRead):
                                          segment_dir)['distance']
             #tip sample distance
             distance_data = height_data + (defl_data)#-defl_data[0]
+
+            #get position
+            x_pos, y_pos = self.get_xypos(segment_header_dict)
             
             result_dict['Force'] = np.append(result_dict['Force'],force_data)
             result_dict['Measured height'] = np.append(result_dict['Measured height'],height_data)
@@ -163,6 +167,10 @@ class JPKAnalyze(JPKRead):
                                                len_data * [seg_name])
             result_dict['Segment folder'] = np.append(result_dict['Segment folder'],
                                                       len_data * [dirpath])
+            result_dict['X'] = np.append(result_dict['X'],
+                                         len_data * [x_pos])
+            result_dict['Y'] = np.append(result_dict['Y'],
+                                         len_data * [y_pos])
 
         return result_dict
 
@@ -294,7 +302,21 @@ class DataAnalyze:
         kmeans = KMeans(n_clusters=n_clusters)
         data = np.array(self.df[self.plot_params['z']]).reshape(-1,1)
         k_fit = kmeans.fit(data)
-        return k_fit.cluster_centers_.flatten()
+        centers = k_fit.cluster_centers_.flatten()
+        labels = k_fit.labels_
+        lab0_min, lab1_min = 1e10, 1e10
+        lab0_max, lab1_max = -1e10, -1e10
+        for i, pt in enumerate(data):
+            if labels[i] == 0:
+                lab0_min = min([lab0_min, pt])
+                lab0_max = max([lab0_max, pt])
+            elif labels[i] == 1:
+                lab1_min = min([lab1_min, pt])
+                lab1_max = max([lab1_max, pt])
+        #foreground/background cutoff limit
+        cutoff = min([max([lab0_min, lab1_min]), min([lab0_max, lab1_max])])
+        result = np.append(centers, [cutoff]) #include centers and cutoff
+        return result
 
     #calculate volume    
     def get_volume(self, coord_vals, zero=0):
@@ -408,20 +430,19 @@ class ImageAnalyze:
         self.markers[np.logical_and(self.im_data > bg[0],
                                     self.im_data < bg[1])] = 1
         #set foreground
-        #TODO: improve segmentation to detect smaller drops as well
         self.markers[np.logical_and(self.im_data > fg[0],
                                     self.im_data < fg[1])] = 2
         self.im_segment = segmentation.watershed(self.im_sobel, self.markers)
         
         im_segment2 = ndi.binary_fill_holes(self.im_segment - 1)
         self.im_labelled, _ = ndi.label(im_segment2)
-        masked = np.ma.masked_where(self.im_labelled == 0,
+        self.masked = np.ma.masked_where(self.im_labelled == 0,
                                     self.im_labelled)
         
         fig = plt.figure('Segments')
         ax = fig.add_subplot(111)
         ax.imshow(self.im_data, cmap='afmhot')
-        ax.imshow(masked, cmap='rainbow')
+        ax.imshow(self.masked, cmap='rainbow')
 
         self.bbox = {}
         self.coords = {}
