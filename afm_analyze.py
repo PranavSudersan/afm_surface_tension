@@ -182,7 +182,7 @@ class JPKAnalyze(JPKRead):
     
 
 class DataFit:
-    def __init__(self, jpk_anal, afm_plot, func, img_anal,
+    def __init__(self, jpk_anal, mode, afm_plot, func, img_anal,
                  guess=None, bounds=(-np.inf, np.inf), zero=0):
         FIT_DICT = {'Sphere-RC': {'function': self.sphere_rc,
                                   'params': 'R,c'
@@ -191,7 +191,7 @@ class DataFit:
 ##        df_filt = jpk_anal.df.query(filter_string)
         coords = img_anal.coords
         bbox = img_anal.bbox
-        mode = 'Snap-in distance'
+##        mode = 'Snap-in distance'
         plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
         x = plot_params['x']
         y = plot_params['y']

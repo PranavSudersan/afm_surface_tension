@@ -216,21 +216,21 @@ class AFMPlot:
                                  reversescale=True,
                                  showlegend=True,
                                  showscale=False))
-        i = 0
+        #i = 0
         for key, val in fit_data.items():
 ##            print(key)
-            leg = True if i==0 else False
-            fig.add_trace(go.Surface(legendgroup="Fit",
-                                     name='Fit',
+            #leg = True if i==0 else False
+            fig.add_trace(go.Surface(#legendgroup="Fit",
+                                     name=f'Fit-{key}',
                                      z=val[z],#df_fit,
                                      x=val[x],#df_fit.columns,
                                      y=val[y],#df_fit.index,
                                      opacity=0.7,
                                      colorscale ='Reds',
                                      reversescale=True,
-                                     showlegend=leg,
+                                     showlegend=True,#leg
                                      showscale=False))
-            i = 1
+            #i = 1
 ##        fig.update_traces(contours_z=dict(show=True, usecolormap=False,
 ##                                          highlightcolor="limegreen",
 ##                                          project_z=True))

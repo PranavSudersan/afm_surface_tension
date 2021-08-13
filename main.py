@@ -33,11 +33,11 @@ simu_df = wetting.combine_simul_data(simu_folderpath)
 ##                                          [65,74], R, s)
 
 ###calculate surface tension
-contact_angle = 90 #INPUT
+contact_angle = 10 #INPUT
 output_df = wetting.get_surface_tension(drop_df, simu_df, contact_angle,
                                         file_name, True)
 
 ###combine multiple fd curves
 ##fd_file_paths, _ = QFileDialog.getOpenFileNames()
-####wetting.combine_fd(fd_file_paths)
+wetting.combine_fd(fd_file_paths)
 ##wetting.get_adhesion_from_fd(fd_file_paths)

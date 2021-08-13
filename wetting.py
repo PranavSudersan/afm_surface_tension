@@ -10,11 +10,7 @@ import numpy as np
 def get_drop_prop(file_path, fd_file_paths = None):
     #import data
     jpk_data = JPKAnalyze(file_path, None)
-    ###analyze jpk data
     
-    anal_data = DataAnalyze(jpk_data, 'Snap-in distance')
-    clusters = anal_data.get_kmeans(2)
-    zero_height = clusters.min()
 ##    volume = anal_data.get_volume(zero=zero_height)
 ##    max_height = anal_data.get_max_height(zero_height)
 
@@ -25,17 +21,24 @@ def get_drop_prop(file_path, fd_file_paths = None):
     #plot data
     afm_plot = AFMPlot(jpk_data)
 
-    #segment image
-    ##anal_adh = DataAnalyze(jpk_data, 'Adhesion')
-    ##clusters_adh = anal_adh.get_kmeans(2)
-    img_anal = ImageAnalyze(jpk_data, 'Snap-in distance')
-    img_anal.segment_image(bg=[-1e10,clusters[-1]],
-                           fg=[clusters[-1],1e10]) #using cutoff from clustering
+    #analyze adhesion data (get fg/bg)
+    anal_data_adh = DataAnalyze(jpk_data, 'Adhesion')
+    clusters_adh = anal_data_adh.get_kmeans(2)
+    #segment adhesion data
+    img_anal = ImageAnalyze(jpk_data, 'Adhesion')
+    img_anal.segment_image(bg=[-1e10,clusters_adh[-1]],
+                           fg=[clusters_adh[-1],1e10]) #using cutoff from clustering
     ##img_anal.segment_image(bg=[0, 1e-7],
     ##                       fg=[3e-7, 4e-7])
 
+    #analyze height data
+    anal_data_h = DataAnalyze(jpk_data, 'Snap-in distance')
+    clusters_h = anal_data_h.get_kmeans(2)
+    zero_height = clusters_h.min()
+    
     ###fit data
-    data_fit = DataFit(jpk_data, afm_plot, 'Sphere-RC', img_anal,
+    data_fit = DataFit(jpk_data, 'Snap-in distance',
+                       afm_plot, 'Sphere-RC', img_anal,
                        zero = zero_height)#,"Height>=0.5e-7",
                        #guess=[1.5e-5,-1e-5],bounds=([1e-6,-np.inf],[1e-4,np.inf]),
 
@@ -61,13 +64,13 @@ def get_drop_prop(file_path, fd_file_paths = None):
         contact_radius = data_fit.fit_output[key]['base_r_fit']
         h = data_fit.fit_output[key]['h_fit']
         
-        V, a = anal_data.get_cap_prop(curvature, h)
-        f_max = anal_data.get_max_adhesion(jpk_data, 'Adhesion',
+        V, a = anal_data_h.get_cap_prop(curvature, h)
+        f_max = anal_data_h.get_max_adhesion(jpk_data, 'Adhesion',
                                            img_anal.coords[key])
 
-        h_raw = anal_data.get_max_height(img_anal.coords[key],
+        h_raw = anal_data_h.get_max_height(img_anal.coords[key],
                                          zero=zero_height)
-        V_raw = anal_data.get_volume(img_anal.coords[key],
+        V_raw = anal_data_h.get_volume(img_anal.coords[key],
                                      zero=zero_height)
         print(key,h,h_raw,V,V_raw)
         
@@ -208,6 +211,7 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal):
         y_real = df_adh['Y'].loc[np.abs(y_array - y_pos).argmin()]
         x_index = np.where(img_anal.im_df.columns == x_real)[0]
         y_index = np.where(img_anal.im_df.index == y_real)[0]
+        #print(y_index,x_index,img_anal.masked[y_index,x_index])
         label = int(img_anal.masked[y_index,x_index])
         #get adhesion
         force_data = df['Force'].to_numpy()
