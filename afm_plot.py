@@ -55,7 +55,7 @@ class AFMPlot:
         ax2d.ticklabel_format(style='sci', scilimits=(0,0))
         ax2d.set_xlabel(x)
         ax2d.set_ylabel(y)
-        fig2d.colorbar(im2d, ax=ax2d, label=z)
+        fig2d.colorbar(im2d, ax=ax2d, label=z, format='%.1e')
         fig2d.suptitle(title)
 
         fig2d.savefig(f'{file_path}/{title}.png', bbox_inches = 'tight',

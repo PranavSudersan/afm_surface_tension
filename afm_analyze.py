@@ -38,6 +38,16 @@ class JPKAnalyze(JPKRead):
                                                                             'title': 'Jump-in distance',
                                                                             'type': ['2d']}
                                                         },
+                                   'Height (measured)': {'function': self.get_height_measured,
+                                                        'output': {'Height': [],
+                                                                   'X': [], 'Y':[],
+                                                                   'Segment folder': []},
+                                                        'plot_parameters': {'x': 'X',
+                                                                            'y': 'Y',
+                                                                            'z': 'Height',
+                                                                            'title': 'Height (measured)',
+                                                                            'type': ['2d']}
+                                                        },
                                    'Force-distance': {'function': self.get_force_distance,
                                                       'output': {'Force': [],
                                                                  'Measured height': [],

@@ -9,7 +9,7 @@ import wetting
 
 app = QApplication(sys.argv)
 
-file_path, _ = QFileDialog.getOpenFileName(caption='Select JPK QI data')
+file_path, _ = QFileDialog.getOpenFileName(caption='Select JPK/QI data')
 #file_path = 'data/qi-area2-data-2021.07.10-19.22.05.499.jpk-qi-data'
 fd_file_paths, _ = QFileDialog.getOpenFileNames(caption='Select JPK force data')
 ##fd_file_path, _ = QFileDialog.getOpenFileName()

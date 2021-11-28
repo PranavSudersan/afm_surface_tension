@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import struct
 import zipfile
-
+import matlab.engine
 
 class JPKRead:        
 
@@ -20,11 +20,41 @@ class JPKRead:
             modes = ['Adhesion', 'Snap-in distance']
         elif self.file_format == 'jpk-force':
             modes = ['Force-distance']
-        elif self.file_format == 'jpk':
-            modes = ['Height']
-        self.data_zip = zipfile.ZipFile(self.file_path, 'r')
-        self.get_data(modes)
+        else:
+            modes = ['Height (measured)']   
+        if self.file_format == 'jpk':
+            self.get_height_measured(file_path, modes)
+        else:
+            self.data_zip = zipfile.ZipFile(self.file_path, 'r')
+            self.get_data(modes)
 
+    #Read JPK file format from matlab code
+    #check https://in.mathworks.com/help/matlab/matlab_external/start-the-matlab-engine-for-python.html      
+    #for installation procedure for MATLAB linking
+    def get_height_measured(self, filepath, modes):
+        eng = matlab.engine.start_matlab()
+
+        matlab_output = eng.open_JPK(filepath)
+        z_data = matlab_output['Height_measured_']['Trace']['AFM_image']
+        x0 = matlab_output['header']['x_Origin']
+        y0 = matlab_output['header']['y_Origin']
+        x_len = matlab_output['header']['x_scan_length']
+        y_len = matlab_output['header']['y_scan_length']
+        x_num = int(matlab_output['header']['x_scan_pixels'])
+        y_num = int(matlab_output['header']['y_scan_pixels'])
+        x_data = np.linspace(x0, x0+x_len, num=x_num)
+        y_data = np.linspace(y0, y0+y_len, num=y_num)
+        mode = modes[0] #CHECK
+        for i in range(x_num-1):
+            for j in range(y_num-1):
+                output = self.anal_dict[mode]['output']
+                output['Height'] = np.append(output['Height'], z_data[j][i])
+                output['X'] = np.append(output['X'], x_data[i])
+                output['Y'] = np.append(output['Y'], y_data[j])
+                output['Segment folder'].append(None) #CHECK
+        self.df[mode] = pd.DataFrame(self.anal_dict[mode]['output'])
+        eng.quit()
+    
     #import datafile and get output dataframe
     def get_data(self, modes):
         print(self.segment_path)

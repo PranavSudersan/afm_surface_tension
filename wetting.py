@@ -10,7 +10,13 @@ import numpy as np
 def get_drop_prop(file_path, fd_file_paths = None):
     #import data
     jpk_data = JPKAnalyze(file_path, None)
-    
+
+    if jpk_data.file_format == 'jpk':
+        segment_mode = 'Height (measured)'
+        volume_mode = 'Height (measured)'
+    elif jpk_data.file_format == 'jpk-qi-data':
+        segment_mode = 'Adhesion'
+        volume_mode = 'Snap-in distance'
 ##    volume = anal_data.get_volume(zero=zero_height)
 ##    max_height = anal_data.get_max_height(zero_height)
 
@@ -28,10 +34,10 @@ def get_drop_prop(file_path, fd_file_paths = None):
     afm_plot = AFMPlot(jpk_data, output_path=output_dir)
 
     #analyze adhesion data (get fg/bg)
-    anal_data_adh = DataAnalyze(jpk_data, 'Adhesion')
+    anal_data_adh = DataAnalyze(jpk_data, segment_mode)
     clusters_adh = anal_data_adh.get_kmeans(2)
     #segment adhesion data
-    img_anal = ImageAnalyze(jpk_data, mode='Adhesion')
+    img_anal = ImageAnalyze(jpk_data, mode=segment_mode)
     img_anal.segment_image(bg=[-1e10,clusters_adh[-1]],
                            fg=[clusters_adh[-1],1e10],
                            output_path=output_dir) #using cutoff from clustering
@@ -39,12 +45,14 @@ def get_drop_prop(file_path, fd_file_paths = None):
     ##                       fg=[3e-7, 4e-7])
 
     #analyze height data
-    anal_data_h = DataAnalyze(jpk_data, 'Snap-in distance')
+    #TODO: change to manual thresholding
+    #TODO: tilt correction
+    anal_data_h = DataAnalyze(jpk_data, volume_mode)
     clusters_h = anal_data_h.get_kmeans(2)
     zero_height = clusters_h.min()
     
     ###fit data
-    data_fit = DataFit(jpk_data, 'Snap-in distance',
+    data_fit = DataFit(jpk_data, volume_mode,
                        afm_plot, 'Sphere-RC', img_anal,
                        zero = zero_height,
                        output_path=output_dir)#,"Height>=0.5e-7",
@@ -59,7 +67,8 @@ def get_drop_prop(file_path, fd_file_paths = None):
     print('label','h','h_raw','V','V_raw')
 
     if fd_file_paths != None:                   
-        fd_adhesion_dict = get_adhesion_from_fd(fd_file_paths, jpk_data, img_anal)
+        fd_adhesion_dict = get_adhesion_from_fd(fd_file_paths, jpk_data,
+                                                img_anal, segment_mode)
         output_dict['Adhesion (FD)'] = []
         output_dict['FD X position'] = []
         output_dict['FD Y position'] = []
@@ -73,8 +82,11 @@ def get_drop_prop(file_path, fd_file_paths = None):
         h = data_fit.fit_output[key]['h_fit']
         
         V, a = anal_data_h.get_cap_prop(curvature, h)
-        f_max = anal_data_h.get_max_adhesion(jpk_data, 'Adhesion',
-                                           img_anal.coords[key])
+        if jpk_data.file_format == 'jpk-qi-data':
+            f_max = anal_data_h.get_max_adhesion(jpk_data, 'Adhesion',
+                                               img_anal.coords[key])
+        else:
+            f_max = None
 
         h_raw = anal_data_h.get_max_height(img_anal.coords[key],
                                          zero=zero_height)
@@ -144,10 +156,12 @@ def get_surface_tension(output_df, simu_df, contact_angle, fd_file_paths,
     if fd_file_paths != None:
         output_df['Surface Tension FD (mN)'] = 1000*output_df['ys/F']*output_df['Adhesion (FD)']/\
                                                output_df['s']
-    
+        print(output_df['Surface Tension FD (mN)'])
+        
     #save final output
     if save == True:
-        output_df.to_excel(f'{file_path}/output.xlsx', index=None)
+        afm_filename = output_df['AFM file'].iloc[0].split('/')[-1][:-4]
+        output_df.to_excel(f'{file_path}/output-{afm_filename}.xlsx', index=None)
 
     return output_df
 
@@ -208,8 +222,8 @@ def combine_simul_data(simu_folderpath):
     #simul_plot(simu_df)
     return simu_df
 
-def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal):
-    df_adh = jpk_map.df['Adhesion']
+def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode):
+    df_adh = jpk_map.df[segment_mode]
     x_array = df_adh['X']
     y_array = df_adh['Y']
     data_dict = {}
