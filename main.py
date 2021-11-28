@@ -1,40 +1,44 @@
 
-from afm_analyze import JPKAnalyze, DataFit, DataAnalyze
-from afm_plot import AFMPlot
+##from afm_analyze import JPKAnalyze, DataFit, DataAnalyze, ImageAnalyze
+##from afm_plot import AFMPlot
 import sys
+##import pandas as pd
+##import numpy as np
+from PyQt5.QtWidgets import QApplication, QFileDialog
+import wetting
 
-mode = 'Adhesion' #'Snap-in distance', 'Adhesion' 'Force-distance'
-##file_path = 'data/force-save-2021.01.08-17.24.07.418.jpk-force'
-file_path = 'data/drops-data-2021.01.08-17.17.02.956.jpk-qi-data'
-##file_path = '../20210227_silicone oil/qi-area6-drop1-data-2021.02.27-19.26.57.873.jpk-qi-data'
+app = QApplication(sys.argv)
 
-#import data
-jpk_data = JPKAnalyze(file_path, mode, None)
-
-###analyze jpk data
-##anal_data = DataAnalyze(jpk_data)
-##clusters = anal_data.get_kmeans(2)
-##zero_height = clusters.min()
-##volume = anal_data.get_volume(zero=zero_height)
-##max_height = anal_data.get_max_height(zero_height)
-
-##print('Volume:', volume)
-##print('Max height:', max_height)
-##print('Zero height:', zero_height)
-
-#plot data
-afm_plot = AFMPlot(jpk_data)
-
-###fit data
-##data_fit = DataFit(jpk_data, afm_plot, 'Sphere-RC', "Height>=0.5e-7",
-##                   guess=[1e-5,-1e-5])
+file_path, _ = QFileDialog.getOpenFileName(caption='Select JPK QI data')
+#file_path = 'data/qi-area2-data-2021.07.10-19.22.05.499.jpk-qi-data'
+fd_file_paths, _ = QFileDialog.getOpenFileNames(caption='Select JPK force data')
+##fd_file_path, _ = QFileDialog.getOpenFileName()
+##fd_file_path = '../20210420 silicone oil tip-pdms brush/force-save-area4-f2_s10-2021.04.20-17.57.38.004.jpk-force'
 ##
-##curvature = data_fit.fit_output['R']
-##contact_radius = anal_data.get_contact_radius(data_fit.fit_output, zero_height)
-##h, V, a = anal_data.get_cap_prop(curvature, data_fit.z_max, zero_height)
-##
-##print('Curvature radius:', curvature)
-##print('Contact radius:', contact_radius)
-##print(f'Cap height: {h}, Cap volume: {V}, Cap contact angle: {a}')
+#simu_folderpath = 'E:/Work/Surface Evolver/afm_pyramid/data/20210325_nps/height=0/'
+simu_folderpath = 'E:/Work/Surface Evolver/afm_pyramid/data/20210803_oltespa/'
 
-#jpk_data.data_zip.close()
+###drop analysis of AFM data
+drop_df, output_path = wetting.get_drop_prop(file_path, fd_file_paths)
+
+#get simulation data for tip geometry
+simu_df = wetting.combine_simul_data(simu_folderpath)
+
+#calculate contact angle from fd curve
+##label = 1 #INPUT
+##label_df = drop_df[drop_df['Label']==label]
+##s = label_df['s'].iloc[0]
+##R = round(label_df['R/s'].iloc[0])
+##contact_angle = wetting.get_contact_angle(fd_file_paths[0], simu_df,
+##                                          [65,74], R, s)
+
+###calculate surface tension
+contact_angle = 60 #INPUT
+output_df = wetting.get_surface_tension(drop_df, simu_df, contact_angle,
+                                        fd_file_paths, output_path, True)
+
+#combine multiple fd curves
+##output_path = ''
+##fd_file_paths, _ = QFileDialog.getOpenFileNames()
+wetting.combine_fd(fd_file_paths, output_path)
+#wetting.get_adhesion_from_fd(fd_file_paths)

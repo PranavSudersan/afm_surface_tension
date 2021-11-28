@@ -14,12 +14,19 @@ class JPKRead:
         self.file_path = file_path
         self.anal_dict = anal_dict
         self.segment_path = segment_path
+        self.df = {}
         self.file_format = self.file_path.split('.')[-1]
+        if self.file_format == 'jpk-qi-data':
+            modes = ['Adhesion', 'Snap-in distance']
+        elif self.file_format == 'jpk-force':
+            modes = ['Force-distance']
+        elif self.file_format == 'jpk':
+            modes = ['Height']
         self.data_zip = zipfile.ZipFile(self.file_path, 'r')
-        self.get_data()
+        self.get_data(modes)
 
     #import datafile and get output dataframe
-    def get_data(self):
+    def get_data(self, modes):
         print(self.segment_path)
 ##        self.file_format = self.file_path.split('.')[-1]
 ##        self.data_zip = zipfile.ZipFile(self.file_path, 'r')
@@ -27,20 +34,24 @@ class JPKRead:
         shared_header = self.data_zip.read('shared-data/header.properties').decode().split('\n')
         self.shared_header_dict = self.parse_header_file(shared_header)    
         file_list = self.data_zip.namelist()
+        
         if self.segment_path == None: #all segments taken
             for file in file_list:
                 if file.endswith('segments/'): # segments folder
-                    result = self.anal_dict['function'](dirpath=file)
-                    for key, value in result.items():
-                        output = self.anal_dict['output']
-                        output[key] = np.append(output[key], value)
+                    for mode in modes:
+                        result = self.anal_dict[mode]['function'](dirpath=file)
+                        for key, value in result.items():
+                            output = self.anal_dict[mode]['output']
+                            output[key] = np.append(output[key], value)
         else: #specific segment taken
-            result = self.anal_dict['function'](dirpath=self.segment_path)
-            for key, value in result.items():
-                output = self.anal_dict['output']
-                output[key] = np.append(output[key], value)
+            for mode in modes:
+                result = self.anal_dict[mode]['function'](dirpath=self.segment_path)
+                for key, value in result.items():
+                    output = self.anal_dict[mode]['output']
+                    output[key] = np.append(output[key], value)
 
-        self.df = pd.DataFrame(self.anal_dict['output'])
+        for mode in modes:
+            self.df[mode] = pd.DataFrame(self.anal_dict[mode]['output'])
 
     def parse_header_file(self, header):
         header_dict = {}
@@ -72,9 +83,11 @@ class JPKRead:
         encod_offset = float(decode_dict['encoder']['scaling']['offset'])
         data_conv = (data_unpack * encod_multiplier) + encod_offset
         conv_list = decode_dict['conversion-set']['conversions']['list'].split(' ')
+        data_dict = {} #data dictionary of each level of converted data (eg. nominal/calibrated, distance/force)
         for conv in conv_list:
             multiplier = float(decode_dict['conversion-set']['conversion'][conv]['scaling']['multiplier'])
             offset = float(decode_dict['conversion-set']['conversion'][conv]['scaling']['offset'])
             data_conv = (data_conv * multiplier) + offset
+            data_dict[conv] = data_conv
 
-        return data_conv
+        return data_dict

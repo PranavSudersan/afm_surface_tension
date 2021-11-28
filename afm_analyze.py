@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+from scipy import interpolate
 from scipy.optimize import curve_fit
 from scipy.interpolate import griddata
 import scipy.ndimage as ndimage
@@ -15,7 +16,7 @@ class JPKAnalyze(JPKRead):
     #mapping of keys in header files which depend on file format
     FORMAT_KEY_DICT = {'jpk-qi-data': {'position': 'position'},
                        'jpk-force': {'position': 'start-position'}}
-    def __init__(self, file_path, mode, segment_path):
+    def __init__(self, file_path, segment_path):
         #Make sure variable keys in result dict of 'function' definition
         #is same as 'output' keys of below
         self.ANALYSIS_MODE_DICT = {'Adhesion': {'function': self.get_adhesion,
@@ -25,7 +26,7 @@ class JPKAnalyze(JPKRead):
                                                                     'y': 'Y',
                                                                     'z': 'Adhesion',
                                                                     'title': 'Adhesion',
-                                                                    'type': ['2d', '3d']}
+                                                                    'type': ['2d']}
                                                 },
                                    'Snap-in distance': {'function': self.get_snapin_distance,
                                                         'output': {'Height': [],
@@ -34,12 +35,14 @@ class JPKAnalyze(JPKRead):
                                                         'plot_parameters': {'x': 'X',
                                                                             'y': 'Y',
                                                                             'z': 'Height',
-                                                                            'title': 'Snap-in distance',
+                                                                            'title': 'Jump-in distance',
                                                                             'type': ['2d']}
                                                         },
                                    'Force-distance': {'function': self.get_force_distance,
                                                       'output': {'Force': [],
+                                                                 'Measured height': [],
                                                                  'Distance': [],
+                                                                 'X': [], 'Y':[],
                                                                  'Segment': [],
                                                                  'Segment folder': []},
                                                       'plot_parameters': {'x': 'Distance',
@@ -51,7 +54,7 @@ class JPKAnalyze(JPKRead):
                                                       }
                                    }
         #initialize JPKRead and get data
-        super().__init__(file_path, self.ANALYSIS_MODE_DICT[mode],
+        super().__init__(file_path, self.ANALYSIS_MODE_DICT,
                          segment_path)
 
     #clear output data in ANALYSIS_MODE_DICT
@@ -66,7 +69,7 @@ class JPKAnalyze(JPKRead):
         segment_header_dict = self.parse_header_file(segment_header)
         #get retract force data
         force_data = self.decode_data('vDeflection', segment_header_dict,
-                                      retract_dir)
+                                      retract_dir)['force']
         #calculate adhesion
         adhesion = force_data[-1] - force_data.min()
 
@@ -87,13 +90,15 @@ class JPKAnalyze(JPKRead):
         segment_header_dict = self.parse_header_file(segment_header)
         #get extend force data
         force_data = self.decode_data('vDeflection', segment_header_dict,
-                                      extend_dir)
+                                      extend_dir)['force']
         #get extend height data
         height_data = self.decode_data('measuredHeight', segment_header_dict,
-                                       extend_dir)
+                                       extend_dir)['nominal']
 
         #calculate snapin distance
-        idx_min = np.argmin(force_data) #minimum force during extend
+        force_sobel = ndimage.sobel(force_data) #sobel transform
+        idx_min = np.argmin(force_sobel)
+##        idx_min = np.argmin(force_data) #minimum force during extend
         #tolerance method to get jumpin distance
 ##        zero_points = 10
 ##        zero_force = statistics.median(force_data[:zero_points])
@@ -112,10 +117,10 @@ class JPKAnalyze(JPKRead):
         #print(idx_min)
         snapin_distance = height_data[idx_min] - height_data[-1]
         #TODO: define as fraction of extend distance range
-##        total_distance = height_data[0] - height_data[-1]
-##        tolerence = 0.8
-##        snapin_distance = 0 if snapin_distance >= tolerence * total_distance \
-##                          else snapin_distance
+        total_distance = height_data[0] - height_data[-1]
+        tolerence = 0.8
+        snapin_distance = 0 if snapin_distance >= tolerence * total_distance \
+                          else snapin_distance
 
         #get position
         x_pos, y_pos = self.get_xypos(segment_header_dict)
@@ -129,8 +134,8 @@ class JPKAnalyze(JPKRead):
 
     def get_force_distance(self, dirpath, *args, **kwargs):
         #USE SAME KEYS AS ANALYSIS_MODE_DICT
-        result_dict = {'Force': [], 'Distance': [], 'Segment': [],
-                       'Segment folder': []}
+        result_dict = {'Force': [], 'Measured height': [], 'Distance': [], 'Segment': [],
+                       'Segment folder': [], 'X': [], 'Y': []}
         #TODO: get segment info from header files
         segment_name = {'0': 'extend', '1': 'retract'}
         for seg_num, seg_name in segment_name.items():        
@@ -141,18 +146,31 @@ class JPKAnalyze(JPKRead):
             segment_header_dict = self.parse_header_file(segment_header)
             #get segment force data
             force_data = self.decode_data('vDeflection', segment_header_dict,
-                                          segment_dir)
-            #get segment height data
+                                          segment_dir)['force']
+            #get piezo measured height data
             height_data = self.decode_data('measuredHeight', segment_header_dict,
-                                           segment_dir)
+                                           segment_dir)['nominal']
+            #get cantilever deflection
+            defl_data = self.decode_data('vDeflection', segment_header_dict,
+                                         segment_dir)['distance']
+            #tip sample distance
+            distance_data = height_data + (defl_data)#-defl_data[0]
 
+            #get position
+            x_pos, y_pos = self.get_xypos(segment_header_dict)
+            
             result_dict['Force'] = np.append(result_dict['Force'],force_data)
-            result_dict['Distance'] = np.append(result_dict['Distance'],height_data)            
+            result_dict['Measured height'] = np.append(result_dict['Measured height'],height_data)
+            result_dict['Distance'] = np.append(result_dict['Distance'],distance_data)
             len_data = len(force_data)
             result_dict['Segment'] = np.append(result_dict['Segment'],
                                                len_data * [seg_name])
             result_dict['Segment folder'] = np.append(result_dict['Segment folder'],
                                                       len_data * [dirpath])
+            result_dict['X'] = np.append(result_dict['X'],
+                                         len_data * [x_pos])
+            result_dict['Y'] = np.append(result_dict['Y'],
+                                         len_data * [y_pos])
 
         return result_dict
 
@@ -164,121 +182,319 @@ class JPKAnalyze(JPKRead):
     
 
 class DataFit:
-    def __init__(self, jpk_anal, afm_plot, func, filter_string,
-                 guess=None, bounds=(-np.inf, np.inf)):
+    def __init__(self, jpk_anal, mode, afm_plot, func, img_anal,
+                 guess=None, bounds=(-np.inf, np.inf), zero=0,
+                 output_path=None):
         FIT_DICT = {'Sphere-RC': {'function': self.sphere_rc,
                                   'params': 'R,c'
                                   }
                     } #'func' arg keys and params
-        df_filt = jpk_anal.df.query(filter_string)
-        plot_params =  jpk_anal.anal_dict['plot_parameters']
+##        df_filt = jpk_anal.df.query(filter_string)
+        coords = img_anal.coords
+        bbox = img_anal.bbox
+##        mode = 'Snap-in distance'
+        plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
-        data = np.array([[df_filt[x][i],
-                          df_filt[y][i],
-                          df_filt[z][i]] for i in df_filt.index])
+        df_data =  jpk_anal.df[mode].pivot_table(values=z, index=y, columns=x,
+                                                      aggfunc='first')
+        self.fit_output = {}
+        self.fit_data_full = {}#pd.DataFrame()
+        num_fit = 20 #number of points in fit
+        for key, val in coords.items():
+            data = np.array([[df_data.columns[coord[1]],
+                             df_data.index[coord[0]],
+                             df_data.iloc[coord[0], coord[1]]] for coord in val])
+##        data = np.array([[df_filt[x][i],
+##                          df_filt[y][i],
+##                          df_filt[z][i]] for i in df_filt.index])
+##            print(data.shape, len(data))
+            if len(data) > 9:
+                x_start  = min([bbox[key][0],bbox[key][2]])
+                x_end = max([bbox[key][0],bbox[key][2]])                
+                y_start  = min([bbox[key][1],bbox[key][3]])
+                y_end = max([bbox[key][1],bbox[key][3]])                
+                
+                #TODO: get below directly from sphere_rc function
+                i, j, k = np.argmax(data, axis=0)
+                a, b, c = data[k, 0], data[k, 1], data[k, 2]
 
-        #fit
-        popt, _ = curve_fit(FIT_DICT[func]['function'], data, data[:,2],
-                            p0=guess, bounds=bounds)
+                base_r = min([x_end-x_start, y_end-y_start])/2
+                h_max = c-zero
+                #https://mathworld.wolfram.com/SphericalCap.html
+                R_guess = (base_r**2 + h_max**2)/(2*h_max)                
+                
+##                R_guess = min(map(abs,[bbox[key][0]-bbox[key][2],
+##                                       bbox[key][1]-bbox[key][3]]))
+                guess = [R_guess, -R_guess]
+                #fit
+                popt, _ = curve_fit(FIT_DICT[func]['function'], data, data[:,2],
+                                    p0=guess, bounds=bounds)
 
-        self.fit_output = dict(zip(FIT_DICT[func]['params'].split(','), popt))
-        print(f'Fit output {func}:', self.fit_output)
-        #get fitted data
-        data_full = np.array([[jpk_anal.df[x][i],
-                               jpk_anal.df[y][i],
-                               jpk_anal.df[z][i]] for i in jpk_anal.df.index])
+                #TODO: weed out bad fits
+                self.fit_output[key] = dict(zip(FIT_DICT[func]['params'].split(','), popt))
+##                print(key, popt, R_guess, c, h_max)
+                #get fitted data
+    ##            data_full = np.array([[jpk_anal.df[mode][x][i],
+    ##                                   jpk_anal.df[mode][y][i],
+    ##                                   jpk_anal.df[mode][z][i]] for i in jpk_anal.df[mode].index])
+                
+                
+##                x_step = (x_end-x_start)/num_fit
+##                y_step = (y_end-y_start)/num_fit
+##                print(bbox[key])
 
-        z_fit = FIT_DICT[func]['function'](data_full, *popt)
-        self.fit_data = pd.DataFrame({x: data_full[:,0],
-                                      y: data_full[:,1],
-                                      f'{z}_raw': data_full[:,2],
-                                      f'{z}_fit': z_fit})
-        self.z_max = z_fit.max() #maximum fitted z
+                h_fit = popt[0] + popt[1] - zero
+                base_r_fit = (h_fit*((2*popt[0])-h_fit))**0.5
+                self.fit_output[key]['h_fit'] = h_fit #fitted height
+                self.fit_output[key]['base_r_fit'] = base_r_fit #fitted contact radius
+                
+                x_fit, y_fit = np.mgrid[a-base_r_fit:a+base_r_fit:complex(0,num_fit),
+                                        b-base_r_fit:b+base_r_fit:complex(0,num_fit)]
+##                x_fit, y_fit = np.mgrid[x_start:x_end:complex(0,num_fit),
+##                                        y_start:y_end:complex(0,num_fit)]
+##                print(x_fit.shape, y_fit.shape)
+##                print(a, 0.5*(x_start+x_end), b, 0.5*(y_start+y_end))
+                z_fit = popt[1] + (abs((popt[0]**2)-((x_fit-a)**2)-((y_fit-b)**2)))**0.5
+##                print('max', z_fit.max(), data[k, 2])
+##                z_fit = FIT_DICT[func]['function'](data, *popt)
+##                fit_data = pd.DataFrame({x: x_fit.flatten(),
+##                                         y: y_fit.flatten(),
+####                                         f'{z}_raw': data[:,2],
+##                                         f'{z}_fit': z_fit.flatten()})
+                fit_data = {x: x_fit, y: y_fit, z: z_fit}
+##                fit_data['label'] = key
+##                self.fit_data_full = self.fit_data_full.append(fit_data)
+                self.fit_data_full[key] = fit_data
+##                self.fit_output[key]['z_max'] = z_fit.max() #maximum fitted z
+
+##        print(f'Fit output {func}:', self.fit_output)
+        #zero height plane
+        x_zero, y_zero = np.mgrid[min(df_data.columns):max(df_data.columns):complex(0,num_fit),
+                                  min(df_data.index):max(df_data.index):complex(0,num_fit)]
+        z_zero = 0*x_zero + zero
+        self.fit_data_full['zero'] = {x: x_zero, y: y_zero, z: z_zero}
         #plot
-        afm_plot.plot_2dfit(self.fit_data, plot_params, self.fit_output)
+        afm_plot.plot_2dfit(self.fit_data_full, df_data, plot_params,
+                            file_path=output_path)
 
     def sphere_rc(self, X, R, C): #sphere function (only R and C)
         i, j, k = np.argmax(X, axis=0)
         a, b = X[k, 0], X[k, 1]
         x, y, z = X.T
-        return C + ((R**2)-((x-a)**2)-((y-b)**2))**0.5
+        return C + (abs((R**2)-((x-a)**2)-((y-b)**2)))**0.5
 
 #analyze processed data from JPKRead
 class DataAnalyze:
-    def __init__(self, jpk_anal):
-        self.plot_params =  jpk_anal.anal_dict['plot_parameters']        
-        self.df = jpk_anal.df.copy()
-
-    #K-means cluster Z data
-    def get_kmeans(self, n_clusters=2):
-        kmeans = KMeans(n_clusters=2)
-        data = np.array(self.df[self.plot_params['z']]).reshape(-1,1)
-        k_fit = kmeans.fit(data)
-        return k_fit.cluster_centers_.flatten()
-
-    #TODO: calculate volume of smoothed surface
-    #calculate volume    
-    def get_volume(self, zero=0):
+    def __init__(self, jpk_anal, mode):
+        self.plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']        
+        self.df = jpk_anal.df[mode].copy()
         
         x = self.plot_params['x']
         y = self.plot_params['y']
         z = self.plot_params['z']
-
         #organize data into matrix for heatmap plot
-        df_filter = self.df.query(f'{z}>=1e-8')#remove zeros
-        
-##        df_matrix = df_filter.pivot_table(values=z,
-##                                          index=y, columns=x,
-##                                          aggfunc='first')
-##        
-##
-##        nx, ny = len(self.df[x].unique()), len(self.df[y].unique()) #grid size
-##        grid_x, grid_y = np.mgrid[self.df[x].min():self.df[x].max():complex(0,nx),
-##                                  self.df[y].min():self.df[y].max():complex(0,ny)]
-##        
-##        
-##        #interpolate
-##        points = df_filter[[x,y]].to_numpy()
-##        values = df_filter[z]        
-##        grid_z2 = griddata(points, values, (grid_x, grid_y), method='cubic')
-##
-##        import matplotlib.pyplot as plt
-##        Z2 = ndimage.gaussian_filter(df_matrix.to_numpy(), sigma=1.0, order=0)
-##        plt.subplot(121)
-##        plt.imshow(df_matrix.to_numpy(), origin='lower')
-##        plt.plot(points[:,0], points[:,1], 'k.', ms=1)
-##        plt.title('Original')
-##        plt.subplot(122)
-##        plt.imshow(Z2, origin='lower')
-##        plt.title('Nearest')
-##        plt.show()
-
-        
-        #organize data into matrix for heatmap plot
-        df_matrix = df_filter.pivot_table(values=z,
+        self.df_matrix = self.df.pivot_table(values=z,
                                           index=y, columns=x,
                                           aggfunc='first')
-        df_shifted = df_matrix-zero
-        df_shifted.fillna(0, inplace=True)
-        vol = np.trapz(np.trapz(df_shifted-zero,
-                                df_shifted.columns),
-                       df_shifted.index)
+
+    #K-means cluster Z data
+    def get_kmeans(self, n_clusters=2):
+        kmeans = KMeans(n_clusters=n_clusters)
+        data = np.array(self.df[self.plot_params['z']]).reshape(-1,1)
+        k_fit = kmeans.fit(data)
+        centers = k_fit.cluster_centers_.flatten()
+        labels = k_fit.labels_
+        lab0_min, lab1_min = 1e10, 1e10
+        lab0_max, lab1_max = -1e10, -1e10
+        for i, pt in enumerate(data):
+            if labels[i] == 0:
+                lab0_min = min([lab0_min, pt])
+                lab0_max = max([lab0_max, pt])
+            elif labels[i] == 1:
+                lab1_min = min([lab1_min, pt])
+                lab1_max = max([lab1_max, pt])
+        #foreground/background cutoff limit
+        cutoff = min([max([lab0_min, lab1_min]), min([lab0_max, lab1_max])])
+        result = np.append(centers, [cutoff]) #include centers and cutoff
+        return result
+
+    #calculate volume    
+    def get_volume(self, coord_vals, zero=0):
+
+        data = np.array([[self.df_matrix.columns[coord[1]],
+                                     self.df_matrix.index[coord[0]],
+                                     self.df_matrix.iloc[coord[0], coord[1]]] for coord in coord_vals])
+
+        data_x, data_y, data_z = data.T
+        df_coord = pd.DataFrame({'x': data_x, 'y': data_y, 'z': data_z})
+        df_coord_mat = df_coord.pivot_table(values='z',
+                                            index='y', columns='x',
+                                            aggfunc='first')
+##        print(data_x,data_y,data_z)
+##        print(data_x.shape,data_y.shape,data_z.shape)
+##        df_shifted = df_matrix-zero
+        df_coord_mat.fillna(zero, inplace=True)
+##        print(np.trapz(df_coord_mat-zero,df_coord_mat.columns))
+
+        try:
+            #cubic interpolation of 2d data
+            f_inter = interpolate.interp2d(df_coord_mat.columns,
+                                           df_coord_mat.index,
+                                           df_coord_mat, kind='cubic')
+            num_interpol = 100
+            x_inter = np.linspace(min(df_coord_mat.columns),
+                                  max(df_coord_mat.columns),
+                                  num_interpol)
+            y_inter = np.linspace(min(df_coord_mat.index),
+                                  max(df_coord_mat.index),
+                                  num_interpol)
+    ##        print(x_inter.shape,y_inter.shape)
+    ##        z_inter = np.empty((num_interpol, num_interpol))
+    ##        print(f_inter(x_inter[0,:], y_inter[0,:]).shape, x_inter[0,:].shape, y_inter[0,:].shape)
+    ##        for i in range(num_interpol):
+    ##            for j in range(num_interpol):
+            z_inter = f_inter(x_inter, y_inter)
+    ##        print(x_inter.shape,y_inter.shape, z_inter.shape)
+    ####        print(z_inter, x_inter[:,0], y_inter[0,:])
+            
+            
+            vol = np.trapz(np.trapz(df_coord_mat-zero,
+                                    df_coord_mat.columns),
+                           df_coord_mat.index)
+    ##        print(vol)
+            vol = np.trapz(np.trapz(z_inter-zero,
+                                    x_inter),
+                           y_inter)
+        except Exception as e:
+            vol=0
+            print(e)
         return vol
 
     #get volume and contact angle of fitted cap
     #reference: https://mathworld.wolfram.com/SphericalCap.html
-    def get_cap_prop(self, R, z_max, zero):
-        h = z_max - zero #cap height
+    def get_cap_prop(self, R, h):
+##        h = z_max - zero #cap height
         vol = (1/3)*np.pi*((3*R)-h)*(h**2)
         angle = 90 - (np.arcsin((R-h)/R)*180/np.pi)
-        return h, vol, angle
+        return vol, angle
 
 
-    def get_max_height(self, zero):
-        return self.df[self.plot_params['z']].max()-zero
+    def get_max_height(self, coord_vals, zero):
+        data = np.array([[self.df_matrix.columns[coord[1]],
+                                     self.df_matrix.index[coord[0]],
+                                     self.df_matrix.iloc[coord[0], coord[1]]] for coord in coord_vals])
 
-    def get_contact_radius(self, fit_out, zero):
-        return (fit_out['R']**2 - (zero-fit_out['c'])**2)**0.5
+        data_x, data_y, data_z = data.T
+        return data_z.max()-zero
+
+##    def get_contact_radius(self, fit_out, zero):
+##        return (fit_out['R']**2 - (zero-fit_out['c'])**2)**0.5
+
+    def get_max_adhesion(self, jpk_anal, mode, coord_val): #find maximum adhesion within region
+        plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
+        x = plot_params['x']
+        y = plot_params['y']
+        z = plot_params['z']
+        #TODO: clean it, change to query, avoid pivot
+        df_adh =  jpk_anal.df[mode].pivot_table(values=z, index=y, columns=x,
+                                                aggfunc='first')
+        return max([df_adh.iloc[coord[0], coord[1]] for coord in coord_val])
+        
+        
     
+from skimage.filters import sobel
+from skimage import segmentation
+from skimage.color import label2rgb
+from skimage.exposure import histogram
+from skimage.measure import regionprops
+from scipy import ndimage as ndi
+from matplotlib import pyplot as plt
+import matplotlib.patches as mpatches
+
+class ImageAnalyze:
+    def __init__(self, jpk_anal, mode):
+##        mode = 'Adhesion'
+        plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
+        x = plot_params['x']
+        y = plot_params['y']
+        z = plot_params['z']
+        self.im_df =  jpk_anal.df[mode].pivot_table(values=z, index=y, columns=x,
+                                                      aggfunc='first')
+        self.im_data =  self.im_df.to_numpy()
+##        self.jpk_anal = jpk_anal
+        
+    def segment_image(self, bg, fg, output_path=None):        
+        self.im_sobel = sobel(self.im_data)
+        self.markers = np.zeros_like(self.im_data)
+        #set background
+        self.markers[np.logical_and(self.im_data > bg[0],
+                                    self.im_data < bg[1])] = 1
+        #set foreground
+        self.markers[np.logical_and(self.im_data > fg[0],
+                                    self.im_data < fg[1])] = 2
+        self.im_segment = segmentation.watershed(self.im_sobel, self.markers)
+        
+        im_segment2 = ndi.binary_fill_holes(self.im_segment - 1)
+        self.im_labelled, _ = ndi.label(im_segment2)
+        self.masked = np.ma.masked_where(self.im_labelled == 0,
+                                    self.im_labelled)
+        
+        fig = plt.figure('Segments')
+        ax = fig.add_subplot(111)
+        ax.imshow(self.im_data, cmap='afmhot')
+        ax.imshow(self.masked, cmap='rainbow')
+
+        self.bbox = {}
+        self.coords = {}
+        for region in regionprops(self.im_labelled):
+##            # take regions with large enough areas
+##            if region.area >= 100:
+                # draw rectangle around segmented coins
+            minr, minc, maxr, maxc = region.bbox
+            self.bbox[region.label] = [self.im_df.columns[minc],
+                                       self.im_df.index[minr],
+                                       self.im_df.columns[maxc-1],
+                                       self.im_df.index[maxr-1]]
+            self.coords[region.label] = region.coords
+            rect = mpatches.Rectangle((minc, minr), maxc - minc, maxr - minr,
+                                      fill=False, edgecolor='white', linewidth=1)
+            ax.add_patch(rect)
+            ax.text(minc,minr,str(region.label),color='white',fontsize=12)
+        
+        ax.invert_yaxis()
+
+        fig.savefig(f'{output_path}/Segments.png', bbox_inches = 'tight',
+                    transparent = True)
+        plt.show(block=False)
+
+    def show_histogram(self):
+        hist, hist_centers = histogram(self.im_data)
+        fig = plt.figure('Histogram')
+        ax = fig.add_subplot(111)
+        ax.plot(hist_centers, hist, lw=2)
+        plt.show(block=False)
+
+##    def check_plot(self):
+##        mode = 'Snap-in distance'
+##        df = self.jpk_anal.df[mode]
+##        plot_params =  self.jpk_anal.anal_dict[mode]['plot_parameters']
+##        x = plot_params['x']
+##        y = plot_params['y']
+##        z = plot_params['z']        
+##        df_data =  self.jpk_anal.df[mode].pivot_table(values=z, index=y, columns=x,
+##                                                      aggfunc='first')
+##        for key, val in self.bbox.items():
+##            df_data_filter = df_data.iloc[val[0]:val[2], val[1]:val[3]]
+##            fig2d = plt.figure(f'label {key}')
+##            ax2d = fig2d.add_subplot(111)
+##            im2d = ax2d.pcolormesh(df_data_filter.columns, df_data_filter.index,
+##                                   df_data_filter, cmap='afmhot')
+##            plt.show(block=False)
+
+##        for key, val in self.coords.items():
+##            data = np.array([df_data.columns[coord[0]],
+##                             df_data.index[coord[1]],
+##                             df_data.iloc[*coord]] for coord in val])
+        

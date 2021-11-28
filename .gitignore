@@ -1,3 +1,4 @@
 __pycache__/
 data/
-_temp_plot.html
+*.html
+*.asv

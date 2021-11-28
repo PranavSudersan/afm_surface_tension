@@ -1,6 +1,7 @@
 import numpy as np
 import plotly.graph_objs as go
 import plotly.offline
+from datetime import datetime
 ##import pandas as pd
 
 
@@ -24,7 +25,8 @@ class PlotlyViewer(QWidget):
 ##        url = "https://domain/your.csv"
 ##        self.view.load(QtCore.QUrl(url))
 
-        self.file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "_temp_plot.html"))
+        timestamp = datetime.today().strftime('%Y%m%d%H%M%S')
+        self.file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), f'_temp_plot-{timestamp}.html'))
         plotly.offline.plot(fig, filename=self.file_path, auto_open=False)
         self.view.load(QUrl.fromLocalFile(self.file_path))
         self.setWindowTitle("Plotly Viewer")
@@ -33,8 +35,8 @@ class PlotlyViewer(QWidget):
         hbox.addWidget(self.view)
         self.show()
 
-        if exec:
-            self.app.exec_()
+##        if exec:
+##            self.app.exec_()
             #sys.exit(self.app.exec_())
 
     @pyqtSlot("QWebEngineDownloadItem*")
@@ -48,8 +50,8 @@ class PlotlyViewer(QWidget):
             download.setPath(path)
             download.accept()
             
-##    def closeEvent(self, event):
-##        os.remove(self.file_path)
+    def closeEvent(self, event):
+        os.remove(self.file_path)
 
 def except_hook(cls, exception, traceback): #display error message/print traceback
     
