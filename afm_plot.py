@@ -12,7 +12,7 @@ from plotly_viewer import PlotlyViewer
 
 class AFMPlot:
     
-    def __init__(self, jpk_anal=None):
+    def __init__(self, jpk_anal=None, output_path=None):
         
         self.plotwin = None
         #mapping plot types (from ANALYSIS_MODE_DICT) to functions
@@ -28,7 +28,8 @@ class AFMPlot:
             for mode in jpk_anal.df.keys():
                 plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
                 for plot_type in plot_params['type']:
-                    PLOT_DICT[plot_type](jpk_anal.df[mode], plot_params)
+                    PLOT_DICT[plot_type](jpk_anal.df[mode], plot_params,
+                                         file_path=output_path)
 
             plt.show(block=False)
 ##        plt.pause(0.05)
@@ -36,7 +37,7 @@ class AFMPlot:
 ####            self.plotwin.show()
 ##            self.plotwin.app.exec_()
     
-    def plot_2d(self, df, plot_params):
+    def plot_2d(self, df, plot_params, file_path=None):
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
@@ -57,6 +58,9 @@ class AFMPlot:
         fig2d.colorbar(im2d, ax=ax2d, label=z)
         fig2d.suptitle(title)
 
+        fig2d.savefig(f'{file_path}/{title}.png', bbox_inches = 'tight',
+                      transparent = True)
+
         canvas = fig2d.canvas
 
 ##        rgb_data = np.fromstring(canvas.tostring_rgb(),
@@ -72,7 +76,7 @@ class AFMPlot:
                                  lambda event: self.on_figclose(event, fig2d))
 
 
-    def plot_3d(self, df, plot_params):
+    def plot_3d(self, df, plot_params, file_path=None):
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
@@ -109,7 +113,7 @@ class AFMPlot:
 ##        self.fig3d.suptitle(plot_params['title'])
 ##        ##fig3d.colorbar(surf, shrink=0.5, aspect=5)
 
-    def plot_line(self, df, plot_params, label_text=None):
+    def plot_line(self, df, plot_params, label_text=None, file_path=None):
         x = plot_params['x']
         y = plot_params['y']
         style = plot_params['style']
@@ -170,7 +174,7 @@ class AFMPlot:
             plot_params = fd_data.ANALYSIS_MODE_DICT[mode]['plot_parameters']
 
             label_text = f'x={"{:.2e}".format(col)}, y={"{:.2e}".format(ind)}'
-            self.plot_line(fd_data.df[mode], plot_params, label_text)
+            self.plot_line(fd_data.df[mode], plot_params, label_text=label_text)
 
             #legend remove duplicates
             handles, labels = self.ax_fd.get_legend_handles_labels()            
@@ -185,7 +189,7 @@ class AFMPlot:
 
             self.fig_fd.show()
 
-    def plot_2dfit(self, fit_data, df_raw, plot_params):
+    def plot_2dfit(self, fit_data, df_raw, plot_params, file_path=None):
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
@@ -247,6 +251,9 @@ class AFMPlot:
                                        aspectratio={"x": 1, "y": 1, "z": 0.4}
                                        ),
                           autosize=True)
+
+        fig.write_html(f'{file_path}/3d_jumpin_distance.html')
+
         self.plotwin  = PlotlyViewer(fig)
 
 def simul_plot(simu_df):

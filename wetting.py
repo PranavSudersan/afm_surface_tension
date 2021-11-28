@@ -18,16 +18,23 @@ def get_drop_prop(file_path, fd_file_paths = None):
     ##print('Max height:', max_height)
     ##print('Zero height:', zero_height)
 
+    #make output directory
+    file_dir = os.path.dirname(file_path)
+    file_name = os.path.basename(file_path)
+    output_dir = f'{file_dir}/analysis/{file_name}'
+    os.makedirs(output_dir, exist_ok=True)
+    
     #plot data
-    afm_plot = AFMPlot(jpk_data)
+    afm_plot = AFMPlot(jpk_data, output_path=output_dir)
 
     #analyze adhesion data (get fg/bg)
     anal_data_adh = DataAnalyze(jpk_data, 'Adhesion')
     clusters_adh = anal_data_adh.get_kmeans(2)
     #segment adhesion data
-    img_anal = ImageAnalyze(jpk_data, 'Adhesion')
+    img_anal = ImageAnalyze(jpk_data, mode='Adhesion')
     img_anal.segment_image(bg=[-1e10,clusters_adh[-1]],
-                           fg=[clusters_adh[-1],1e10]) #using cutoff from clustering
+                           fg=[clusters_adh[-1],1e10],
+                           output_path=output_dir) #using cutoff from clustering
     ##img_anal.segment_image(bg=[0, 1e-7],
     ##                       fg=[3e-7, 4e-7])
 
@@ -39,7 +46,8 @@ def get_drop_prop(file_path, fd_file_paths = None):
     ###fit data
     data_fit = DataFit(jpk_data, 'Snap-in distance',
                        afm_plot, 'Sphere-RC', img_anal,
-                       zero = zero_height)#,"Height>=0.5e-7",
+                       zero = zero_height,
+                       output_path=output_dir)#,"Height>=0.5e-7",
                        #guess=[1.5e-5,-1e-5],bounds=([1e-6,-np.inf],[1e-4,np.inf]),
 
     
@@ -101,13 +109,14 @@ def get_drop_prop(file_path, fd_file_paths = None):
     output_df['s'] = ((3*output_df['Volume'])/(4*np.pi))**(1/3)
     output_df['R/s'] = output_df['Contact Radius']/output_df['s']
     output_df['AFM file'] = file_path
-    file_name = file_path.split('/')[-1][:-len(jpk_data.file_format)-1]
+    #file_name = file_path.split('/')[-1][:-len(jpk_data.file_format)-1]
 
-    return output_df, file_name
+    return output_df, output_dir
 ##    print('s:', output_df['s'], 'R/s', output_df['R/s'])
 
-def get_surface_tension(output_df, simu_df, contact_angle,
-                        file_name, save=False):
+def get_surface_tension(output_df, simu_df, contact_angle, fd_file_paths,
+                        file_path, save=False):
+    
     #import simulation data
 ##    simu_filepath = 'E:/Work/Surface Evolver/afm_pyramid/data/20210325_nps/height=0/'\
 ##                    'data-CA_p30-h 0-Rsi1.5_Rsf3.5.txt'
@@ -131,10 +140,14 @@ def get_surface_tension(output_df, simu_df, contact_angle,
     output_df['Simulation file'] = simu_df_filtered['File path'].iloc[0]
     
     print(output_df['Surface Tension (mN)'])
+
+    if fd_file_paths != None:
+        output_df['Surface Tension FD (mN)'] = 1000*output_df['ys/F']*output_df['Adhesion (FD)']/\
+                                               output_df['s']
     
     #save final output
-    if save == True:                    
-        output_df.to_excel(f'data/output/{file_name}-output.xlsx', index=None)
+    if save == True:
+        output_df.to_excel(f'{file_path}/output.xlsx', index=None)
 
     return output_df
 
@@ -212,16 +225,19 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal):
         x_index = np.where(img_anal.im_df.columns == x_real)[0]
         y_index = np.where(img_anal.im_df.index == y_real)[0]
         #print(y_index,x_index,img_anal.masked[y_index,x_index])
-        label = int(img_anal.masked[y_index,x_index])
-        #get adhesion
-        force_data = df['Force'].to_numpy()
-        adhesion = force_data[-1] - force_data.min()
-        data_dict[label] = [adhesion, x_pos, y_pos, x_real, y_real, file_path]
-        
+        try:
+            label = int(img_anal.masked[y_index,x_index])
+            #get adhesion
+            force_data = df['Force'].to_numpy()
+            adhesion = force_data[-1] - force_data.min()
+            data_dict[label] = [adhesion, x_pos, y_pos, x_real, y_real, file_path]
+        except Exception as e:
+            print(e)
+            pass
     return data_dict
 
     
-def combine_fd(file_paths):
+def combine_fd(file_paths, output_dir=None):
     afm_plot = AFMPlot()
     mode = 'Force-distance'
     for file_path in file_paths:
@@ -237,6 +253,9 @@ def combine_fd(file_paths):
     leg = afm_plot.ax_fd.legend(leg_dict.values(), leg_dict.keys())
     leg.set_draggable(True, use_blit=True)
 
+    afm_plot.fig_fd.savefig(f'{output_dir}/FD_curves.png', bbox_inches = 'tight',
+                            transparent = True)
+    
     afm_plot.fig_fd.show()
         
 #jpk_data.data_zip.close()

@@ -183,7 +183,8 @@ class JPKAnalyze(JPKRead):
 
 class DataFit:
     def __init__(self, jpk_anal, mode, afm_plot, func, img_anal,
-                 guess=None, bounds=(-np.inf, np.inf), zero=0):
+                 guess=None, bounds=(-np.inf, np.inf), zero=0,
+                 output_path=None):
         FIT_DICT = {'Sphere-RC': {'function': self.sphere_rc,
                                   'params': 'R,c'
                                   }
@@ -275,7 +276,8 @@ class DataFit:
         z_zero = 0*x_zero + zero
         self.fit_data_full['zero'] = {x: x_zero, y: y_zero, z: z_zero}
         #plot
-        afm_plot.plot_2dfit(self.fit_data_full, df_data, plot_params)
+        afm_plot.plot_2dfit(self.fit_data_full, df_data, plot_params,
+                            file_path=output_path)
 
     def sphere_rc(self, X, R, C): #sphere function (only R and C)
         i, j, k = np.argmax(X, axis=0)
@@ -423,7 +425,7 @@ class ImageAnalyze:
         self.im_data =  self.im_df.to_numpy()
 ##        self.jpk_anal = jpk_anal
         
-    def segment_image(self, bg, fg):        
+    def segment_image(self, bg, fg, output_path=None):        
         self.im_sobel = sobel(self.im_data)
         self.markers = np.zeros_like(self.im_data)
         #set background
@@ -462,6 +464,9 @@ class ImageAnalyze:
             ax.text(minc,minr,str(region.label),color='white',fontsize=12)
         
         ax.invert_yaxis()
+
+        fig.savefig(f'{output_path}/Segments.png', bbox_inches = 'tight',
+                    transparent = True)
         plt.show(block=False)
 
     def show_histogram(self):

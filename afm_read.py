@@ -20,6 +20,8 @@ class JPKRead:
             modes = ['Adhesion', 'Snap-in distance']
         elif self.file_format == 'jpk-force':
             modes = ['Force-distance']
+        elif self.file_format == 'jpk':
+            modes = ['Height']
         self.data_zip = zipfile.ZipFile(self.file_path, 'r')
         self.get_data(modes)
 
