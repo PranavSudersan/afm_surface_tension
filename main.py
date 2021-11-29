@@ -30,10 +30,10 @@ simu_df = wetting.combine_simul_data(simu_folderpath)
 ##s = label_df['s'].iloc[0]
 ##R = round(label_df['R/s'].iloc[0])
 ##contact_angle = wetting.get_contact_angle(fd_file_paths[0], simu_df,
-##                                          [65,74], R, s)
+##                                          [60,63], R, s)
 
-###calculate surface tension
-contact_angle = 60 #INPUT
+#calculate surface tension
+contact_angle = 75 #INPUT
 output_df = wetting.get_surface_tension(drop_df, simu_df, contact_angle,
                                         fd_file_paths, output_path, True)
 

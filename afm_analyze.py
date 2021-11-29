@@ -26,7 +26,8 @@ class JPKAnalyze(JPKRead):
                                                                     'y': 'Y',
                                                                     'z': 'Adhesion',
                                                                     'title': 'Adhesion',
-                                                                    'type': ['2d']}
+                                                                    'type': ['2d'],
+                                                                    'points_flag':False}
                                                 },
                                    'Snap-in distance': {'function': self.get_snapin_distance,
                                                         'output': {'Height': [],
@@ -36,7 +37,8 @@ class JPKAnalyze(JPKRead):
                                                                             'y': 'Y',
                                                                             'z': 'Height',
                                                                             'title': 'Jump-in distance',
-                                                                            'type': ['2d']}
+                                                                            'type': ['2d'],
+                                                                            'points_flag':False}
                                                         },
                                    'Height (measured)': {'function': self.get_height_measured,
                                                         'output': {'Height': [],
@@ -46,7 +48,8 @@ class JPKAnalyze(JPKRead):
                                                                             'y': 'Y',
                                                                             'z': 'Height',
                                                                             'title': 'Height (measured)',
-                                                                            'type': ['2d']}
+                                                                            'type': ['2d'],
+                                                                            'points_flag':True}
                                                         },
                                    'Force-distance': {'function': self.get_force_distance,
                                                       'output': {'Force': [],
@@ -59,8 +62,8 @@ class JPKAnalyze(JPKRead):
                                                                           'y': 'Force',
                                                                           'style': 'Segment',
                                                                           'title': 'Force-distance curve',
-                                                                          'type': ['line']
-                                                                          }
+                                                                          'type': ['line'],
+                                                                          'points_flag':False}
                                                       }
                                    }
         #initialize JPKRead and get data

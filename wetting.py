@@ -17,6 +17,7 @@ def get_drop_prop(file_path, fd_file_paths = None):
     elif jpk_data.file_format == 'jpk-qi-data':
         segment_mode = 'Adhesion'
         volume_mode = 'Snap-in distance'
+
 ##    volume = anal_data.get_volume(zero=zero_height)
 ##    max_height = anal_data.get_max_height(zero_height)
 
@@ -32,7 +33,9 @@ def get_drop_prop(file_path, fd_file_paths = None):
     
     #plot data
     afm_plot = AFMPlot(jpk_data, output_path=output_dir)
-
+    print(afm_plot.points_data)
+    #TODO: fit plane using points data
+    
     #analyze adhesion data (get fg/bg)
     anal_data_adh = DataAnalyze(jpk_data, segment_mode)
     clusters_adh = anal_data_adh.get_kmeans(2)
@@ -175,6 +178,7 @@ def get_contact_angle(file_path, simu_df, fit_range, R, s):
                       int(fit_range[1]*num_points/100)-1)
     retract_fit = np.polyfit(df['Distance'][fit_slice],
                              df['Force'][fit_slice],1)
+    print('FD Fit:', retract_fit)
     d_retract = df['Distance'][int(num_points/2):]
     f_fit = np.polyval(retract_fit,d_retract)
     wetted_length = (df['Force'].iloc[0]-retract_fit[1])/retract_fit[0] - \

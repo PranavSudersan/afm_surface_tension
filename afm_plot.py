@@ -29,24 +29,25 @@ class AFMPlot:
                 plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
                 for plot_type in plot_params['type']:
                     PLOT_DICT[plot_type](jpk_anal.df[mode], plot_params,
-                                         file_path=output_path)
+                                         file_path=output_path,
+                                         points=plot_params['points_flag'])
 
-            plt.show(block=False)
+            #plt.show(block=False)
 ##        plt.pause(0.05)
 ##        if self.plotwin != None:
 ####            self.plotwin.show()
 ##            self.plotwin.app.exec_()
     
-    def plot_2d(self, df, plot_params, file_path=None):
+    def plot_2d(self, df, plot_params, file_path=None, points=False):
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
         title = plot_params['title']
+        self.points_data = np.empty((0, 3), float)
         #organize data into matrix for heatmap plot
         df_data = df.pivot_table(values=z, index=y, columns=x,
                                  aggfunc='first')
-        df_reference = df.pivot_table(values='Segment folder', index=y,
-                                      columns=x, aggfunc='first')
+        
         #plot
         fig2d = plt.figure(f'{title}')
         ax2d = fig2d.add_subplot(111)
@@ -67,16 +68,24 @@ class AFMPlot:
 ##                                 dtype=np.uint8, sep='')
 ##        rgb_data = rgb_data.reshape(canvas.get_width_height()[::-1] + (3,))
 
-        
-        self.cid = fig2d.canvas.mpl_connect('button_press_event',
-                                       lambda event: self.on_click(event,
-                                                                   df_reference))
+        if points == False:
+            df_reference = df.pivot_table(values='Segment folder', index=y,
+                                          columns=x, aggfunc='first')
+            self.cid = fig2d.canvas.mpl_connect('button_press_event',
+                                           lambda event: self.on_click(event,
+                                                                       df_reference))
+        else:
+            self.cid = fig2d.canvas.mpl_connect('button_press_event',
+                                           lambda event: self.on_click(event,
+                                                                       df_data, points))
+                
         #BUG: program doesn't end after callbacks
         fig2d.canvas.mpl_connect('close_event',
                                  lambda event: self.on_figclose(event, fig2d))
+        plt.show(block=points)
 
 
-    def plot_3d(self, df, plot_params, file_path=None):
+    def plot_3d(self, df, plot_params, file_path=None, points=False):
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
@@ -113,7 +122,7 @@ class AFMPlot:
 ##        self.fig3d.suptitle(plot_params['title'])
 ##        ##fig3d.colorbar(surf, shrink=0.5, aspect=5)
 
-    def plot_line(self, df, plot_params, label_text=None, file_path=None):
+    def plot_line(self, df, plot_params, label_text=None, file_path=None, points=False):
         x = plot_params['x']
         y = plot_params['y']
         style = plot_params['style']
@@ -130,6 +139,7 @@ class AFMPlot:
         self.ax_fd.set_xlabel(x)
         self.ax_fd.set_ylabel(y)
         self.fig_fd.suptitle(plot_params['title'])
+        plt.show(block=False)
 ##        df.to_excel('test-fd-data.xlsx')
 
     def init_fd_plot(self): #initialize force-distance plot
@@ -146,7 +156,7 @@ class AFMPlot:
         fig.canvas.mpl_disconnect(self.cid)
 ##        self.jpk_anal.data_zip.close() #CHECK THIS
         
-    def on_click(self, event, df_ref):
+    def on_click(self, event, df_ref, points=False):
         print('click')
         x, y = event.xdata, event.ydata
         if x != None and y != None:
@@ -155,39 +165,48 @@ class AFMPlot:
                          key=lambda l:l[0])[0][1]
             ind = sorted([[abs(a - y), a] for a in df_ref.index],
                          key=lambda l:l[0])[0][1]
-            segment_path = df_ref[col][ind]
-            print(segment_path, col, ind)
-
-            #TODO: clean and organize this up
-            mode = 'Force-distance'
-            fd_data = self.jpk_anal
-            segment_path_old = fd_data.segment_path
-##            anal_dict_old = fd_data.anal_dict.copy()
-            fd_data.clear_output(mode) #clear previous data
-            fd_data.segment_path = segment_path
-##            fd_data.anal_dict = fd_data.ANALYSIS_MODE_DICT[mode].copy()
-##            print('old')
-##            print(mode_dict_old)
-            fd_data.get_data([mode])
             
-            #fd_data = JPKAnalyze(self.file_path, mode, segment_path)
-            plot_params = fd_data.ANALYSIS_MODE_DICT[mode]['plot_parameters']
 
-            label_text = f'x={"{:.2e}".format(col)}, y={"{:.2e}".format(ind)}'
-            self.plot_line(fd_data.df[mode], plot_params, label_text=label_text)
+            if points == False:
+                segment_path = df_ref[col][ind]
+                print(segment_path, col, ind)
+                #TODO: clean and organize this up
+                mode = 'Force-distance'
+                fd_data = self.jpk_anal
+                segment_path_old = fd_data.segment_path
+    ##            anal_dict_old = fd_data.anal_dict.copy()
+                fd_data.clear_output(mode) #clear previous data
+                fd_data.segment_path = segment_path
+    ##            fd_data.anal_dict = fd_data.ANALYSIS_MODE_DICT[mode].copy()
+    ##            print('old')
+    ##            print(mode_dict_old)
+                fd_data.get_data([mode])
+                
+                #fd_data = JPKAnalyze(self.file_path, mode, segment_path)
+                plot_params = fd_data.ANALYSIS_MODE_DICT[mode]['plot_parameters']
 
-            #legend remove duplicates
-            handles, labels = self.ax_fd.get_legend_handles_labels()            
-            leg_dict = dict(zip(labels[::-1],handles[::-1]))
-            self.ax_fd.get_legend().remove()
-            leg = self.ax_fd.legend(leg_dict.values(), leg_dict.keys())
-            leg.set_draggable(True, use_blit=True)
+                label_text = f'x={"{:.2e}".format(col)}, y={"{:.2e}".format(ind)}'
+                self.plot_line(fd_data.df[mode], plot_params, label_text=label_text)
 
-            #CHECK
-            fd_data.segment_path = None
-##            fd_data.anal_dict = anal_dict_old
+                #legend remove duplicates
+                handles, labels = self.ax_fd.get_legend_handles_labels()            
+                leg_dict = dict(zip(labels[::-1],handles[::-1]))
+                self.ax_fd.get_legend().remove()
+                leg = self.ax_fd.legend(leg_dict.values(), leg_dict.keys())
+                leg.set_draggable(True, use_blit=True)
 
-            self.fig_fd.show()
+                #CHECK
+                fd_data.segment_path = None
+    ##            fd_data.anal_dict = anal_dict_old
+
+                self.fig_fd.show()
+            else:
+                z_value = df_ref[col][ind]
+                self.points_data = np.append(self.points_data,
+                                             np.array([[col,ind,z_value]]),
+                                             axis=0)
+                print(col, ind, z_value)
+            
 
     def plot_2dfit(self, fit_data, df_raw, plot_params, file_path=None):
         x = plot_params['x']
