@@ -33,26 +33,32 @@ def get_drop_prop(file_path, fd_file_paths = None):
     
     #plot data
     afm_plot = AFMPlot(jpk_data, output_path=output_dir)
-    print(afm_plot.points_data)
-    #TODO: fit plane using points data
-    
-    #analyze adhesion data (get fg/bg)
+    points_data = afm_plot.points_data #collect points to fit plane
+
+    #analyze height data    
+    anal_data_h = DataAnalyze(jpk_data, volume_mode)
+    if len(points_data)!=0:#tilt correction
+        anal_data_h.level_data(points_data)
+        jpk_data.df[volume_mode] = anal_data_h.df.copy()
+        jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['z'] += ' corrected'
+        jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['title'] += ' corrected'
+        afm_plot.__init__(jpk_data, output_path=output_dir)
+        zero_height = 0
+    else:   
+        clusters_h = anal_data_h.get_kmeans(2)
+        zero_height = clusters_h.min()
+
+    #analyze adhesion data for segmentation (get fg/bg)
     anal_data_adh = DataAnalyze(jpk_data, segment_mode)
     clusters_adh = anal_data_adh.get_kmeans(2)
+    
     #segment adhesion data
     img_anal = ImageAnalyze(jpk_data, mode=segment_mode)
     img_anal.segment_image(bg=[-1e10,clusters_adh[-1]],
                            fg=[clusters_adh[-1],1e10],
-                           output_path=output_dir) #using cutoff from clustering
+                           output_path=output_dir) #using cutoff from clustering initially
     ##img_anal.segment_image(bg=[0, 1e-7],
     ##                       fg=[3e-7, 4e-7])
-
-    #analyze height data
-    #TODO: change to manual thresholding
-    #TODO: tilt correction
-    anal_data_h = DataAnalyze(jpk_data, volume_mode)
-    clusters_h = anal_data_h.get_kmeans(2)
-    zero_height = clusters_h.min()
     
     ###fit data
     data_fit = DataFit(jpk_data, volume_mode,

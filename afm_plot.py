@@ -273,7 +273,7 @@ class AFMPlot:
 
         fig.write_html(f'{file_path}/3d_jumpin_distance.html')
 
-        self.plotwin  = PlotlyViewer(fig)
+        #self.plotwin  = PlotlyViewer(fig)
 
 def simul_plot(simu_df):
     sns.set_context("talk")

@@ -8,6 +8,7 @@ from scipy.interpolate import griddata
 import scipy.ndimage as ndimage
 from sklearn.cluster import KMeans
 import statistics
+from matplotlib.widgets import Slider
 
 from afm_read import JPKRead
 
@@ -304,14 +305,31 @@ class DataAnalyze:
         self.plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']        
         self.df = jpk_anal.df[mode].copy()
         
-        x = self.plot_params['x']
-        y = self.plot_params['y']
-        z = self.plot_params['z']
+        self.plot_x = self.plot_params['x']
+        self.plot_y = self.plot_params['y']
+        self.plot_z = self.plot_params['z']
         #organize data into matrix for heatmap plot
-        self.df_matrix = self.df.pivot_table(values=z,
-                                          index=y, columns=x,
-                                          aggfunc='first')
+        self.df_matrix = self.df.pivot_table(values=self.plot_z,
+                                             index=self.plot_y,
+                                             columns=self.plot_x,
+                                             aggfunc='first')
 
+    def level_data(self, points):
+        X,Y = np.meshgrid(self.df_matrix.columns,
+                          self.df_matrix.index)
+
+        # best-fit linear plane
+        A = np.c_[points[:,0], points[:,1], np.ones(points.shape[0])]
+        C,_,_,_ = np.linalg.lstsq(A, points[:,2],rcond=None)    # coefficients
+        print(C)
+        # evaluate it on grid
+        Z = C[0]*X + C[1]*Y + C[2]
+        print(Z)
+        self.df['Zero fit'] = C[0]*self.df[self.plot_x] + \
+                              C[1]*self.df[self.plot_y] + C[2]
+        print(self.df)
+        self.df[self.plot_z+' corrected'] = self.df[self.plot_z]-self.df['Zero fit']
+    
     #K-means cluster Z data
     def get_kmeans(self, n_clusters=2):
         kmeans = KMeans(n_clusters=n_clusters)
@@ -454,10 +472,10 @@ class ImageAnalyze:
         self.masked = np.ma.masked_where(self.im_labelled == 0,
                                     self.im_labelled)
         
-        fig = plt.figure('Segments')
-        ax = fig.add_subplot(111)
-        ax.imshow(self.im_data, cmap='afmhot')
-        ax.imshow(self.masked, cmap='rainbow')
+        self.fig = plt.figure('Segments')
+        self.ax = self.fig.add_axes([0.10, 0.3, 0.8, 0.6])
+        self.ax.imshow(self.im_data, cmap='afmhot')
+        self.ax.imshow(self.masked, cmap='rainbow')
 
         self.bbox = {}
         self.coords = {}
@@ -473,14 +491,65 @@ class ImageAnalyze:
             self.coords[region.label] = region.coords
             rect = mpatches.Rectangle((minc, minr), maxc - minc, maxr - minr,
                                       fill=False, edgecolor='white', linewidth=1)
-            ax.add_patch(rect)
-            ax.text(minc,minr,str(region.label),color='white',fontsize=12)
+            self.ax.add_patch(rect)
+            self.ax.text(minc,minr,str(region.label),color='white',fontsize=12)
         
-        ax.invert_yaxis()
+        self.ax.invert_yaxis()
 
-        fig.savefig(f'{output_path}/Segments.png', bbox_inches = 'tight',
+        #create sliders for tweaking fg/bg params
+        axis_bg = self.fig.add_axes([0.10, 0.1, 0.8, 0.03], facecolor='lightgoldenrodyellow')        
+        self.slider_bg = Slider(axis_bg, 'BG', self.im_data.min(),
+                                self.im_data.max(), valinit=bg[1], valfmt='%.1e')
+        axis_fg = self.fig.add_axes([0.10, 0.15, 0.8, 0.03], facecolor='lightgoldenrodyellow')
+        self.slider_fg = Slider(axis_fg, 'FG', self.im_data.min(),
+                                self.im_data.max(), valinit=fg[0], valfmt='%.1e')
+        self.slider_bg.on_changed(self.update_segments)
+        self.slider_fg.on_changed(self.update_segments)
+
+        plt.show(block=True)
+        self.fig.savefig(f'{output_path}/Segments.png', bbox_inches = 'tight',
                     transparent = True)
-        plt.show(block=False)
+        
+    #update sliders for segmentation
+    def update_segments(self, val):
+        #self.im_sobel = sobel(self.im_data)
+        self.markers = np.zeros_like(self.im_data)
+        #set background
+        self.markers[np.logical_and(self.im_data > -1e10,
+                                    self.im_data < self.slider_bg.val)] = 1
+        #set foreground
+        self.markers[np.logical_and(self.im_data > self.slider_fg.val,
+                                    self.im_data < 1e10)] = 2
+        self.im_segment = segmentation.watershed(self.im_sobel, self.markers)
+        
+        im_segment2 = ndi.binary_fill_holes(self.im_segment - 1)
+        self.im_labelled, _ = ndi.label(im_segment2)
+        self.masked = np.ma.masked_where(self.im_labelled == 0,
+                                    self.im_labelled)
+        
+        self.ax.cla()
+        self.ax.imshow(self.im_data, cmap='afmhot')
+        self.ax.imshow(self.masked, cmap='rainbow')
+
+        self.bbox = {}
+        self.coords = {}
+        for region in regionprops(self.im_labelled):
+##            # take regions with large enough areas
+##            if region.area >= 100:
+                # draw rectangle around segmented coins
+            minr, minc, maxr, maxc = region.bbox
+            self.bbox[region.label] = [self.im_df.columns[minc],
+                                       self.im_df.index[minr],
+                                       self.im_df.columns[maxc-1],
+                                       self.im_df.index[maxr-1]]
+            self.coords[region.label] = region.coords
+            rect = mpatches.Rectangle((minc, minr), maxc - minc, maxr - minr,
+                                      fill=False, edgecolor='white', linewidth=1)
+            self.ax.add_patch(rect)
+            self.ax.text(minc,minr,str(region.label),color='white',fontsize=12)
+        
+        self.ax.invert_yaxis()
+        self.fig.canvas.draw_idle()
 
     def show_histogram(self):
         hist, hist_centers = histogram(self.im_data)
