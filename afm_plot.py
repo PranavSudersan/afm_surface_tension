@@ -122,7 +122,8 @@ class AFMPlot:
 ##        self.fig3d.suptitle(plot_params['title'])
 ##        ##fig3d.colorbar(surf, shrink=0.5, aspect=5)
 
-    def plot_line(self, df, plot_params, label_text=None, file_path=None, points=False):
+    def plot_line(self, df, plot_params, label_text=None, file_path=None, points=False,
+                  color=None):
         x = plot_params['x']
         y = plot_params['y']
         style = plot_params['style']
@@ -133,7 +134,8 @@ class AFMPlot:
 
         sns.lineplot(x=x, y=y, style=style,
                      data=df, ax=self.ax_fd,
-                     label = label_text, sort=False)
+                     label = label_text, sort=False,
+                     color=color)
 ##        self.ax_fd.plot(df[x], df[y])
         self.ax_fd.ticklabel_format(style='sci', scilimits=(0,0))
         self.ax_fd.set_xlabel(x)

@@ -16,14 +16,14 @@ fd_file_paths, _ = QFileDialog.getOpenFileNames(caption='Select JPK force data')
 ##fd_file_path = '../20210420 silicone oil tip-pdms brush/force-save-area4-f2_s10-2021.04.20-17.57.38.004.jpk-force'
 ##
 #simu_folderpath = 'E:/Work/Surface Evolver/afm_pyramid/data/20210325_nps/height=0/'
-simu_folderpath = 'E:/Work/Surface Evolver/afm_pyramid/data/20210803_oltespa/'
+simu_folderpath = 'E:/Work/Surface Evolver/afm_pyramid/data/20211205_oltespa/'
 
 ###drop analysis of AFM data
 drop_df, output_path = wetting.get_drop_prop(file_path, fd_file_paths)
 
 #get simulation data for tip geometry
-simu_df = wetting.combine_simul_data(simu_folderpath)
-
+#simu_df = wetting.combine_simul_data(simu_folderpath)
+simu_df = wetting.combine_simul_dirs(simu_folderpath)
 #calculate contact angle from fd curve
 ##label = 1 #INPUT
 ##label_df = drop_df[drop_df['Label']==label]
@@ -33,12 +33,12 @@ simu_df = wetting.combine_simul_data(simu_folderpath)
 ##                                          [60,63], R, s)
 
 #calculate surface tension
-contact_angle = 75 #INPUT
-output_df = wetting.get_surface_tension(drop_df, simu_df, contact_angle,
+#contact_angle = 75 #INPUT
+output_df = wetting.get_surface_tension2(drop_df, simu_df, 30, 10,
                                         fd_file_paths, output_path, True)
 
 #combine multiple fd curves
 ##output_path = ''
 ##fd_file_paths, _ = QFileDialog.getOpenFileNames()
-wetting.combine_fd(fd_file_paths, output_path)
+#wetting.combine_fd(fd_file_paths, output_path)
 #wetting.get_adhesion_from_fd(fd_file_paths)
