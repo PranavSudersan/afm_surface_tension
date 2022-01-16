@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import itertools
 from scipy import interpolate
 from scipy.optimize import curve_fit
 from scipy.interpolate import griddata
@@ -314,21 +315,55 @@ class DataAnalyze:
                                              columns=self.plot_x,
                                              aggfunc='first')
 
-    def level_data(self, points):
+    #generate Matrix to use with lstsq for levelling
+    def poly_matrix(self, x, y, order=2):
+        ncols = (order + 1)**2
+        G = np.zeros((x.size, ncols))
+        ij = itertools.product(range(order+1), range(order+1))
+        for k, (i, j) in enumerate(ij):
+            G[:, k] = x**i * y**j
+        return G
+
+
+    def level_data(self, points, order=1):
         X,Y = np.meshgrid(self.df_matrix.columns,
                           self.df_matrix.index)
 
-        # best-fit linear plane
-        A = np.c_[points[:,0], points[:,1], np.ones(points.shape[0])]
-        C,_,_,_ = np.linalg.lstsq(A, points[:,2],rcond=None)    # coefficients
-        print(C)
-        # evaluate it on grid
-        Z = C[0]*X + C[1]*Y + C[2]
-        print(Z)
-        self.df['Zero fit'] = C[0]*self.df[self.plot_x] + \
-                              C[1]*self.df[self.plot_y] + C[2]
-        print(self.df)
+        if order == 1:
+            # best-fit linear plane
+            A = np.c_[points[:,0], points[:,1], np.ones(points.shape[0])]
+            C,_,_,_ = np.linalg.lstsq(A, points[:,2], rcond=None)    # coefficients
+            print(C)
+            # evaluate it on grid
+##            Z = C[0]*X + C[1]*Y + C[2]
+##            print(Z)
+            self.df['Zero fit'] = C[0]*self.df[self.plot_x] + \
+                                  C[1]*self.df[self.plot_y] + C[2]
+            print(self.df)
+        elif order == 2:
+            x, y, z = points.T
+            #x, y = x - x[0], y - y[0]  # this improves accuracy
+
+            # make Matrix:
+            G = self.poly_matrix(x, y, order)
+            # Solve for np.dot(G, m) = z:
+            m = np.linalg.lstsq(G, z, rcond=None)[0]
+            print('m', m)
+            # Evaluate it on a grid...
+##            GG = self.poly_matrix(X.ravel(), Y.ravel(), order)
+##            Z = np.reshape(np.dot(GG, m), X.shape)
+##            print(Z)
+            self.df['Zero fit'] = np.polynomial.polynomial.polyval2d(self.df[self.plot_x],
+                                                                     self.df[self.plot_y],
+                                                                     np.reshape(m, (-1, 3)))
+        
         self.df[self.plot_z+' corrected'] = self.df[self.plot_z]-self.df['Zero fit']
+
+        #organize data into matrix for heatmap plot
+        self.df_matrix = self.df.pivot_table(values=self.plot_z+' corrected',
+                                             index=self.plot_y,
+                                             columns=self.plot_x,
+                                             aggfunc='first')
     
     #K-means cluster Z data
     def get_kmeans(self, n_clusters=2):

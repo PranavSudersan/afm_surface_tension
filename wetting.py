@@ -8,7 +8,7 @@ import numpy as np
 
 
 #drop volume/contact radius/contact angle
-def get_drop_prop(file_path, fd_file_paths = None):
+def get_drop_prop(file_path, fd_file_paths = None, level_order=1, fit_range=10000):
     #import data
     jpk_data = JPKAnalyze(file_path, None)
 
@@ -39,7 +39,7 @@ def get_drop_prop(file_path, fd_file_paths = None):
     #analyze height data    
     anal_data_h = DataAnalyze(jpk_data, volume_mode)
     if len(points_data)!=0:#tilt correction
-        anal_data_h.level_data(points_data)
+        anal_data_h.level_data(points_data, order=level_order)
         jpk_data.df[volume_mode] = anal_data_h.df.copy()
         jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['z'] += ' corrected'
         jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['title'] += ' corrected'
@@ -79,9 +79,11 @@ def get_drop_prop(file_path, fd_file_paths = None):
     if fd_file_paths != None:                   
         fd_adhesion_dict = get_adhesion_from_fd(fd_file_paths, jpk_data,
                                                 img_anal, segment_mode,
+                                                fit_range = fit_range,
                                                 output_path = output_dir)
         output_dict['Adhesion (FD)'] = []
         output_dict['Slope (FD)'] = []
+        output_dict['Wetted length (FD)'] = []
         output_dict['FD X position'] = []
         output_dict['FD Y position'] = []
         output_dict['FD file'] = []
@@ -121,12 +123,14 @@ def get_drop_prop(file_path, fd_file_paths = None):
                 val = fd_adhesion_dict[key]
                 output_dict['Adhesion (FD)'].append(val[0])
                 output_dict['Slope (FD)'].append(val[6])
+                output_dict['Wetted length (FD)'].append(val[7])
                 output_dict['FD X position'].append(val[1])
                 output_dict['FD Y position'].append(val[2])
                 output_dict['FD file'].append(val[5])
             else:
                 output_dict['Adhesion (FD)'].append(0)
                 output_dict['Slope (FD)'].append(0)
+                output_dict['Wetted length (FD)'].append(0)
                 output_dict['FD X position'].append(0)
                 output_dict['FD Y position'].append(0)
                 output_dict['FD file'].append('')
@@ -147,46 +151,95 @@ def get_surface_tension(output_df, simu_df, contact_angle, fd_file_paths,
 ##    simu_filepath = 'E:/Work/Surface Evolver/afm_pyramid/data/20210325_nps/height=0/'\
 ##                    'data-CA_p30-h 0-Rsi1.5_Rsf3.5.txt'
 ##    simu_df = pd.read_csv(simu_filepath,delimiter='\t')
-    ca_nearest = min(simu_df['Top_Angle'].unique(),
-                     key=lambda x:abs(x-contact_angle))
-    simu_df_filtered = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index()
-##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
+    if contact_angle != None:
+        ca_nearest = min(simu_df['Top_Angle'].unique(),
+                         key=lambda x:abs(x-contact_angle))
+        simu_df_filtered = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index()
+    ##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
 
-    #3rd order polynomial fit of Force-Contact radius data
-    fr_fit = np.polyfit(simu_df_filtered['Contact_Radius'], simu_df_filtered['Force_Calc'], 3)
-    output_df['F_fit'] = np.polyval(fr_fit,output_df['R/s'])
-    output_df['ys/F'] = -1/(2*np.pi*output_df['F_fit']) #inverse
+        #3rd order polynomial fit of Force-Contact radius data
+        fr_fit = np.polyfit(simu_df_filtered['Contact_Radius'], simu_df_filtered['Force_Calc'], 3)
+        output_df['F_fit'] = np.polyval(fr_fit,output_df['R/s'])
+        output_df['ys/F'] = -1/(2*np.pi*output_df['F_fit']) #inverse
 
-    #surface tension in mN/m
-    output_df['Surface Tension (mN)'] = 1000*output_df['ys/F']*output_df['Max Adhesion']/\
-                                   output_df['s']
+        #surface tension in mN/m
+        output_df['Surface Tension (mN)'] = 1000*output_df['ys/F']*output_df['Max Adhesion']/\
+                                       output_df['s']
 
-    #miscellaneous data
-    output_df['Simulation contact angle'] = ca_nearest
-    output_df['Simulation file'] = simu_df_filtered['File path'].iloc[0]
-    
-    print(output_df['Surface Tension (mN)'])
+        #miscellaneous data
+        output_df['Simulation contact angle'] = ca_nearest
+        output_df['Simulation file'] = simu_df_filtered['File path'].iloc[0]
+        
+        print(output_df['Surface Tension (mN)'])
 
     if fd_file_paths != None:
-        output_df['Surface Tension FD (mN)'] = 1000*output_df['ys/F']*output_df['Adhesion (FD)']/\
-                                               output_df['s']
+        if contact_angle != None:
+            output_df['Surface Tension FD (mN)'] = 1000*output_df['ys/F']*output_df['Adhesion (FD)']/\
+                                                   output_df['s']
+        else:
+            output_df['F_fit'] = 0.0
+            output_df['ys/F'] = 0.0
+            output_df['Simulation contact angle'] = 0.0
+            output_df['Simulation file'] = ''
+            for i in output_df.index:
+##                R = min([3.5,round(output_df['R/s'].loc[i])]) #CHECK 3.5 (limit)
+                R = min(simu_df['Contact_Radius'].unique(),
+                        key=lambda x:abs(x-output_df['R/s'].loc[i]))
+                wetted_length = output_df['Wetted length (FD)'].loc[i]
+                s = output_df['s'].loc[i]
+                F_adh = output_df['Adhesion (FD)'].loc[i]
+                print(output_df['R/s'].loc[i],R,s)
+            ##    R = 2.8 # R/s INPUT
+            ##    s = 2.44e-6 # s value (in meters from jumpin analysis INPUT
+                #TODO: use interpolated values instead of filtering
+                simu_df_filtered = simu_df[simu_df['Contact_Radius'] == R].\
+                                   sort_values(by=['Average Wetted Height'])
+            ##    print(simu_df_filtered['Average Wetted Height'],simu_df_filtered['Top_Angle'])
+                #3rd order polynomial fit of Wetted length-Contact angle data
+                wa_fit = np.polyfit(simu_df_filtered['Average Wetted Height'],
+                                    simu_df_filtered['Top_Angle'], 3)
+                contact_angle = np.polyval(wa_fit,wetted_length/s)                
+                ca_nearest = min(simu_df['Top_Angle'].unique(),
+                                 key=lambda x:abs(x-contact_angle))
+                print('Contact angle', contact_angle,ca_nearest)
+                simu_df_filtered2 = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index()
+            ##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
+
+                #3rd order polynomial fit of Force-Contact radius data
+                fr_fit = np.polyfit(simu_df_filtered2['Contact_Radius'],
+                                    simu_df_filtered2['Force_Calc'], 3)
+                F_fit = np.polyval(fr_fit,R)
+                ys_f = -1/(2*np.pi*F_fit) #inverse
+                tension = 1000*ys_f*F_adh/s
+                
+                output_df.at[i,'Surface Tension FD (mN)'] = tension
+                output_df.at[i,'Simulation contact angle'] = contact_angle
+                output_df.at[i,'F_fit'] = F_fit
+                output_df.at[i,'ys/F'] = ys_f
+                output_df.at[i,'Simulation file'] = simu_df_filtered2['File path'].iloc[0]
+                
+    
         print(output_df['Surface Tension FD (mN)'])
         
     #save final output
     if save == True:
         afm_filename = output_df['AFM file'].iloc[0].split('/')[-1][:-4]
-        output_df.to_excel(f'{file_path}/output-{afm_filename}.xlsx', index=None)
+        output_df.to_excel(f'{file_path}/output_FR-{afm_filename}.xlsx', index=None)
 
     return output_df
 
-def get_contact_angle(file_path, simu_df, fit_range, R, s):
+def get_contact_angle(file_path, simu_df, R, s, fit_index=10000):
     #import data
     jpk_data = JPKAnalyze(file_path, None)
     df = jpk_data.df['Force-distance']
 ##    fit_range = [72,80] #fitting range in percentage INPUT
     num_points = len(df.index)
-    fit_slice = slice(int(fit_range[0]*num_points/100),
-                      int(fit_range[1]*num_points/100)-1)
+    force_data = df['Force'].to_numpy()
+    adh_id = np.argmin(force_data)
+    fit_range = [adh_id, adh_id+fit_index] #CHECK 10000, make adjustable
+    fit_slice = slice(fit_range[0],fit_range[1])
+##    fit_slice = slice(int(fit_range[0]*num_points/100),
+##                      int(fit_range[1]*num_points/100)-1)
     retract_fit = np.polyfit(df['Distance'][fit_slice],
                              df['Force'][fit_slice],1)
     print('FD Fit:', retract_fit)
@@ -223,6 +276,7 @@ def get_contact_angle(file_path, simu_df, fit_range, R, s):
     print('Contact angle', contact_angle)
     return contact_angle
 
+#calculate surface tension iteratively from force-distance curves
 def get_surface_tension2(output_df, simu_df, tension_guess_orig, tolerance, fd_file_paths,
                         file_path, save=False):
     if fd_file_paths != None:
@@ -240,42 +294,58 @@ def get_surface_tension2(output_df, simu_df, tension_guess_orig, tolerance, fd_f
 
             #linear fit of Force-distance data
             fd_fit_dict = {}
+            fa_dict = {} #fmax - angle data
             for top_angle in simu_df_filtered['Top_Angle'].unique():
                 df_temp = simu_df_filtered[simu_df_filtered['Top_Angle'] == top_angle]
                 fd_fit = np.polyfit(df_temp['Height'], df_temp['Force_Calc'], 1)
                 fd_fit_dict[top_angle]= fd_fit[0]
-            print(fd_fit_dict)
+                fa_dict[top_angle]= df_temp[df_temp['Height'] == 0.0]['Force_Calc'].iloc[0]
+            print(fd_fit_dict, fa_dict)
             angle_slope_fit = np.polyfit(list(map(float,fd_fit_dict.values())),
-                                         list(map(float,fd_fit_dict.keys())), 1)
+                                         list(map(float,fd_fit_dict.keys())), 2)
             print(angle_slope_fit)
+            force_angle_fit = np.polyfit(list(map(float,fa_dict.keys())),
+                                         list(map(float,fa_dict.values())), 2)
+            print(force_angle_fit)
+            #tension_guess_orig = np.linspace(70,1,140)
             tension_guess = tension_guess_orig
+            #j = 0
             while True:
-                print('tension;', tension_guess)
+                #tension_guess = tension_guess_orig[j]
                 slope_expt = output_df['Slope (FD)'].loc[i]/(2*np.pi*tension_guess/1000)
-                contact_angle = angle_slope_fit[0]*slope_expt + angle_slope_fit[1]
-                contact_angle_nearest = min(simu_df_filtered['Top_Angle'].unique(),
-                                            key=lambda x:abs(x-contact_angle))
-                df_temp2 = simu_df_filtered[simu_df_filtered['Top_Angle'] == contact_angle_nearest]
-                fmax_simul = df_temp2[df_temp2['Height'] == 0.0]['Force_Calc'].iloc[0]
+                #slope_expt = 0.042/(2*np.pi*tension_guess/1000)
+##                contact_angle = angle_slope_fit[0]*slope_expt + angle_slope_fit[1]
+                contact_angle = np.polyval(angle_slope_fit,slope_expt)
+                contact_angle = 1 if contact_angle < 0 else contact_angle
+                contact_angle = 90 if contact_angle > 90 else contact_angle
+##                contact_angle_nearest = min(simu_df_filtered['Top_Angle'].unique(),
+##                                            key=lambda x:abs(x-contact_angle))
+##                df_temp2 = simu_df_filtered[simu_df_filtered['Top_Angle'] == contact_angle_nearest]
+##                fmax_simul = df_temp2[df_temp2['Height'] == 0.0]['Force_Calc'].iloc[0]
+                fmax_simul = np.polyval(force_angle_fit,contact_angle)
                 ys_f = -1/(2*np.pi*fmax_simul) #inverse y*s/F
                 tension_new = 1000*ys_f*output_df['Adhesion (FD)'].loc[i]/\
                                                output_df['s'].loc[i]
-                if abs((tension_new-tension_guess)*100/tension_guess) > tolerance:
+                print('tension guess', tension_guess, 'tension new;', tension_new,
+                      'contact angle', contact_angle, 'slope', slope_expt)
+                #if abs((tension_new-tension_guess)*100/tension_guess) > tolerance:
+                if abs(tension_new-tension_guess) > tolerance:
                     tension_guess = tension_new
+                    #j += 1
                 else:
                     break
             print('here')
             output_df.at[i,'Surface Tension FD (mN)'] = tension_new
-            output_df.at[i,'Simulation contact angle'] = contact_angle_nearest
+            output_df.at[i,'Simulation contact angle'] = contact_angle
             output_df.at[i,'ys/F'] = ys_f
-            output_df.at[i,'Simulation file'] = df_temp2['File path'].iloc[0]
+            output_df.at[i,'Simulation file'] = simu_df_filtered['File path'].iloc[0]
 
         print(output_df['Surface Tension FD (mN)'])
         
         #save final output
         if save == True:
             afm_filename = output_df['AFM file'].iloc[0].split('/')[-1][:-4]
-            output_df.to_excel(f'{file_path}/output-{afm_filename}.xlsx', index=None)
+            output_df.to_excel(f'{file_path}/output_FD-{afm_filename}.xlsx', index=None)
 
     return output_df
 
@@ -306,7 +376,8 @@ def combine_simul_dirs(simu_folderpath):
     return simu_df
 
 #get adhesion and slope from force data files
-def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,output_path=None):
+def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
+                         fit_range=10000, output_path=None):
     df_adh = jpk_map.df[segment_mode]
     x_array = df_adh['X']
     y_array = df_adh['Y']
@@ -337,16 +408,23 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,output_p
             #get FD slope at retract
             num_points = len(df.index)
             adh_id = np.argmin(force_data)
-            fit_range = [adh_id, adh_id+10000] #CHECK 1000, make adjustable
-            fit_slice = slice(fit_range[0],fit_range[1])
+            if type(fit_range).__name__ == 'int': #fit based on adhesion point
+                fit_slice = slice(adh_id,adh_id+fit_range)
+            elif type(fit_range).__name__ == 'list': #fit based on range percentage
+                #fit_range = [70,75] 
+                fit_slice = slice(int(fit_range[0]*num_points/100),
+                                  int(fit_range[1]*num_points/100)-1)
+            
             retract_fit = np.polyfit(df['Distance'][fit_slice],
                                      df['Force'][fit_slice],1)
             print('FD Fit:', retract_fit)
-            #plot fit line
+            #get wetted length
             d_retract = df['Distance'][int(num_points/2):]
             f_fit = np.polyval(retract_fit,d_retract)
-            #afm_plot = AFMPlot(jpk_data)
-            
+            wetted_length = (df['Force'].iloc[0]-retract_fit[1])/retract_fit[0] - \
+                            d_retract.iloc[0]
+
+            #plot fit line
             label_text = str(label)
             
             afm_plot.plot_line(df, plot_params, label_text=label_text, color=colors[i])
@@ -354,7 +432,8 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,output_p
             afm_plot.ax_fd.plot(d_retract,f_fit, label=label_text, color=colors[i])
             afm_plot.ax_fd.set_ylim(ylim)
         
-            data_dict[label] = [adhesion, x_pos, y_pos, x_real, y_real, file_path, retract_fit[0]]
+            data_dict[label] = [adhesion, x_pos, y_pos, x_real, y_real,
+                                file_path, retract_fit[0], wetted_length]
         except Exception as e:
             print(e)
             pass
@@ -369,6 +448,7 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,output_p
         leg = afm_plot.ax_fd.legend(leg_dict.values(), leg_dict.keys())
         leg.set_draggable(True, use_blit=True)
 
+        afm_plot.ax_fd.autoscale(enable=True)
         afm_plot.fig_fd.savefig(f'{output_path}/FD_curves.png', bbox_inches = 'tight',
                                 transparent = False)
     return data_dict
