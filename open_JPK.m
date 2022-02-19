@@ -140,6 +140,13 @@ if(strcmp(extension,valid_extensions{1,1}))
             else
                 y_scan_pixels=nan;
             end
+
+            if(~isempty(find([file_info(i).UnknownTags.ID]==32836)))
+                scanangle=rad2deg(file_info(i).UnknownTags(find([file_info(i).UnknownTags.ID]==32836)).Value);
+            else
+                warning('No Scan Angle slot found')
+                scanangle=nan;
+            end
             
             if(strcmp(Type,'contact'))
                 
@@ -180,12 +187,12 @@ if(strcmp(extension,valid_extensions{1,1}))
                     Alpha=nan;
                 end
                 
-                if(~isempty(find([file_info(i).UnknownTags.ID]==32836)))
-                    scanangle=rad2deg(file_info(i).UnknownTags(find([file_info(i).UnknownTags.ID]==32836)).Value);
-                else
-                    warning('No Scan Angle slot found')
-                    scanangle=nan;
-                end
+%                if(~isempty(find([file_info(i).UnknownTags.ID]==32836)))
+%                    scanangle=rad2deg(file_info(i).UnknownTags(find([file_info(i).UnknownTags.ID]==32836)).Value);
+%                else
+%                    warning('No Scan Angle slot found')
+%                    scanangle=nan;
+%                end
                 
                 if(file_info(i).UnknownTags(find([file_info(i).UnknownTags.ID]==32820)).Value==1)
                     Baseline_Raw=((file_info(i).UnknownTags(find([file_info(i).UnknownTags.ID]==32819)).Value-file_info(i).UnknownTags(find([file_info(i).UnknownTags.ID]==32821)).Value)-file_info(i).UnknownTags(find([file_info(i).UnknownTags.ID]==32980)).Value);
@@ -297,6 +304,7 @@ if(strcmp(extension,valid_extensions{1,1}))
                     'Type', Type,...
                     'x_Origin', x_Origin,...
                     'y_Origin', y_Origin,...
+                    'Scanangle', scanangle,...
                     'x_scan_length', x_scan_length,...
                     'y_scan_length', y_scan_length,...
                     'x_scan_pixels', x_scan_pixels,...

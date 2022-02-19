@@ -36,17 +36,22 @@ class JPKRead:
 
         matlab_output = eng.open_JPK(filepath)
         z_data = matlab_output['Height_measured_']['Trace']['AFM_image']
+        print(matlab_output['header'], matlab_output.keys())
         x0 = matlab_output['header']['x_Origin']
         y0 = matlab_output['header']['y_Origin']
         x_len = matlab_output['header']['x_scan_length']
         y_len = matlab_output['header']['y_scan_length']
         x_num = int(matlab_output['header']['x_scan_pixels'])
         y_num = int(matlab_output['header']['y_scan_pixels'])
+        scan_angle = matlab_output['header']['Scanangle']*np.pi/180 #in radians
         x_data = np.linspace(x0, x0+x_len, num=x_num)
         y_data = np.linspace(y0, y0+y_len, num=y_num)
         mode = modes[0] #CHECK
+        self.rotation_info = [x0, y0, scan_angle]
         for i in range(x_num-1):
             for j in range(y_num-1):
+                #x_rotated = x0 + (x_data[i]-x0)*np.cos(scan_angle) + (y_data[j]-y0)*np.sin(scan_angle)
+                #y_rotated = y0 -(x_data[i]-x0)*np.sin(scan_angle) + (y_data[j]-y0)*np.cos(scan_angle)
                 output = self.anal_dict[mode]['output']
                 output['Height'] = np.append(output['Height'], z_data[j][i])
                 output['X'] = np.append(output['X'], x_data[i])

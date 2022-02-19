@@ -141,7 +141,7 @@ class AFMPlot:
         self.ax_fd.set_xlabel(x)
         self.ax_fd.set_ylabel(y)
         self.fig_fd.suptitle(plot_params['title'])
-        plt.show(block=False)
+        #plt.show(block=False)
 ##        df.to_excel('test-fd-data.xlsx')
 
     def init_fd_plot(self): #initialize force-distance plot
@@ -311,7 +311,43 @@ def simul_plot(simu_df):
     leg.set_title('Contact angle')
     
     plt.show(block=False)
-        
+
+
+def simul_plot2(simu_df):
+    sns.set_context("talk")
+    sns.set_style("ticks")
+    Rs = simu_df['Contact_Radius'].iloc[0]
+    fig = plt.figure(f'Simulation data FD Rs={Rs}')
+    
+    ax1 = fig.add_subplot(1,1,1)
+    mk_num = len(simu_df['Top_Angle'].unique())
+    sns.lineplot(x='Height',y='Force_Calc',hue='Top_Angle',
+                 style='Top_Angle',data=simu_df,
+                 markers=['o']*mk_num,dashes=False,
+                 legend='full',palette='flare', ax=ax1)
+    ax1.axhline(y=0, color='0.8', dashes=(1, 1), zorder=0)
+    
+    ax1.set_title('Adhesion force')
+    ax1.set_xlabel('Height, h/s')
+    ax1.set_ylabel(r'$F/2\pi \gamma s$')
+    leg = ax1.get_legend()
+##    leg.remove()
+##    
+##    ax2 = fig.add_subplot(1,2,2)
+##    mk_num = len(simu_df['Top_Angle'].unique())
+##    sns.lineplot(x='Contact_Radius',
+##                 y='Average Wetted Height',hue='Top_Angle',
+##                 style='Top_Angle',data=simu_df,
+##                 markers=['o']*mk_num,dashes=False,
+##                 legend='full',palette='flare', ax=ax2)
+##
+##    ax2.set_title('Wetted length')
+##    ax2.set_xlabel('Drop size, R/s')
+##    ax2.set_ylabel('w/s')
+##    leg = ax2.get_legend()
+    leg.set_title('Contact angle')
+    
+    plt.show(block=False)        
 
         
 ##    def plot_2dfit(self, df, plot_params, fit_output):

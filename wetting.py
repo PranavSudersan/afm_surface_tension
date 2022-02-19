@@ -1,11 +1,12 @@
 from afm_analyze import JPKAnalyze, DataFit, DataAnalyze, ImageAnalyze
-from afm_plot import AFMPlot, simul_plot
+from afm_plot import AFMPlot, simul_plot, simul_plot2
 from matplotlib.pyplot import cm
+from matplotlib import pyplot as plt
 import sys
 import os
 import pandas as pd
 import numpy as np
-
+from scipy import integrate
 
 #drop volume/contact radius/contact angle
 def get_drop_prop(file_path, fd_file_paths = None, level_order=1, fit_range=10000):
@@ -15,9 +16,11 @@ def get_drop_prop(file_path, fd_file_paths = None, level_order=1, fit_range=1000
     if jpk_data.file_format == 'jpk':
         segment_mode = 'Height (measured)'
         volume_mode = 'Height (measured)'
+        rotation_info = jpk_data.rotation_info
     elif jpk_data.file_format == 'jpk-qi-data':
         segment_mode = 'Adhesion'
         volume_mode = 'Snap-in distance'
+        rotation_info = None #CHECK for QI!
 
 ##    volume = anal_data.get_volume(zero=zero_height)
 ##    max_height = anal_data.get_max_height(zero_height)
@@ -79,6 +82,7 @@ def get_drop_prop(file_path, fd_file_paths = None, level_order=1, fit_range=1000
     if fd_file_paths != None:                   
         fd_adhesion_dict = get_adhesion_from_fd(fd_file_paths, jpk_data,
                                                 img_anal, segment_mode,
+                                                rotation_info = rotation_info,
                                                 fit_range = fit_range,
                                                 output_path = output_dir)
         output_dict['Adhesion (FD)'] = []
@@ -350,8 +354,9 @@ def get_surface_tension2(output_df, simu_df, tension_guess_orig, tolerance, fd_f
     return output_df
 
 
-def combine_simul_data(simu_folderpath):
+def combine_simul_data(simu_folderpath, fit=False):
     simu_df = pd.DataFrame()
+    fd_fit_dict = {}
     with os.scandir(simu_folderpath) as folder:
         for file in folder:
             if file.is_file() and file.path.endswith( ('.txt') ):
@@ -359,10 +364,17 @@ def combine_simul_data(simu_folderpath):
                 df_temp['ys/F'] = -1/(2*np.pi*df_temp['Force_Calc']) #inverse
                 df_temp['File path'] = file.path
                 simu_df = simu_df.append(df_temp)
+                if fit == True:
+                    angle = df_temp['Top_Angle'].iloc[0]
+                    Rs = df_temp['Contact_Radius'].iloc[0]
+                    fd_fit_dict[angle] = np.polyfit(df_temp['Height'],
+                                                    df_temp['Force_Calc'], 3)
+                    rupture_distance = max(np.roots(fd_fit_dict[angle]))
+                    print(Rs, angle, rupture_distance) #CHECK!
                  
     simu_df['Simulation folder'] = simu_folderpath
     #simul_plot(simu_df)
-    return simu_df
+    return simu_df, fd_fit_dict
 
 #combine data from subfolders
 def combine_simul_dirs(simu_folderpath):
@@ -370,14 +382,16 @@ def combine_simul_dirs(simu_folderpath):
     with os.scandir(simu_folderpath) as folder:
         for fdr in folder:
             if fdr.is_dir():
-                df_temp = combine_simul_data(fdr.path)
+                df_temp, fd_fit_dict = combine_simul_data(fdr.path,
+                                                          fit=True)
+                #simul_plot2(df_temp)
                 simu_df = simu_df.append(df_temp)
     #simu_df.to_excel('simu_out.xlsx')
     return simu_df
 
 #get adhesion and slope from force data files
 def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
-                         fit_range=10000, output_path=None):
+                         rotation_info=None, fit_range=10000, output_path=None):
     df_adh = jpk_map.df[segment_mode]
     x_array = df_adh['X']
     y_array = df_adh['Y']
@@ -394,11 +408,20 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
         #find label of fd point
         x_pos = df['X'].loc[0]
         y_pos = df['Y'].loc[0]
-        x_real = df_adh['X'].loc[np.abs(x_array - x_pos).argmin()]
-        y_real = df_adh['Y'].loc[np.abs(y_array - y_pos).argmin()]
+        if rotation_info != None:
+            x0, y0, scan_angle = rotation_info[0], rotation_info[1], rotation_info[2]
+            x_rot = x0 + (x_pos-x0)*np.cos(scan_angle) + (y_pos-y0)*np.sin(scan_angle)
+            y_rot = y0 -(x_pos-x0)*np.sin(scan_angle) + (y_pos-y0)*np.cos(scan_angle)
+        else:
+            x_rot = x_pos
+            y_rot = y_pos
+        print(x_pos, y_pos, x_rot, y_rot)
+        x_real = df_adh['X'].loc[np.abs(x_array - x_rot).argmin()]
+        y_real = df_adh['Y'].loc[np.abs(y_array - y_rot).argmin()]
         x_index = np.where(img_anal.im_df.columns == x_real)[0]
         y_index = np.where(img_anal.im_df.index == y_real)[0]
-        #print(y_index,x_index,img_anal.masked[y_index,x_index])    
+        print(y_index,x_index,img_anal.masked[y_index,x_index])
+        num_points = len(df.index)
         try:
             label = int(img_anal.masked[y_index,x_index])
             #get adhesion
@@ -406,7 +429,7 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
             adhesion = force_data[-1] - force_data.min()
 
             #get FD slope at retract
-            num_points = len(df.index)
+##            num_points = len(df.index)
             adh_id = np.argmin(force_data)
             if type(fit_range).__name__ == 'int': #fit based on adhesion point
                 fit_slice = slice(adh_id,adh_id+fit_range)
@@ -424,33 +447,60 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
             wetted_length = (df['Force'].iloc[0]-retract_fit[1])/retract_fit[0] - \
                             d_retract.iloc[0]
 
+            #get area under curve
+            force_shifted = [x-force_data[-1] for x in force_data]
+            energy_slice = slice(int(num_points/2), num_points-1)
+            energy_adhesion = integrate.simps(force_shifted[energy_slice],
+                                              df['Distance'][energy_slice])
+            print('energy',label, energy_adhesion)
             #plot fit line
             label_text = str(label)
             
             afm_plot.plot_line(df, plot_params, label_text=label_text, color=colors[i])
-            ylim = afm_plot.ax_fd.get_ylim()
-            afm_plot.ax_fd.plot(d_retract,f_fit, label=label_text, color=colors[i])
-            afm_plot.ax_fd.set_ylim(ylim)
-        
-            data_dict[label] = [adhesion, x_pos, y_pos, x_real, y_real,
+##            ylim = afm_plot.ax_fd.get_ylim()
+##            afm_plot.ax_fd.plot(d_retract,f_fit, label=label_text, color=colors[i])
+##            afm_plot.ax_fd.set_ylim(ylim)
+            afm_plot.ax_fd.fill_between(df['Distance'][energy_slice],
+                                        force_data[-1],
+                                        force_data[energy_slice],
+                                        color = 'black', alpha=0.5)
+            
+            data_dict[label] = [adhesion, x_rot, y_rot, x_real, y_real,
                                 file_path, retract_fit[0], wetted_length]
+
+            #legend remove duplicates and sort
+            handles, labels = afm_plot.ax_fd.get_legend_handles_labels()
+            handles, labels = zip(*[ (handles[j], labels[j]) for j in sorted(range(len(handles)),
+                                                                             key=lambda k: labels[k],
+                                                                             reverse=True)])
+            leg_dict = dict(zip(labels[::-1],handles[::-1]))
+            afm_plot.ax_fd.get_legend().remove()
+            leg = afm_plot.ax_fd.legend(leg_dict.values(), leg_dict.keys())
+            leg.set_draggable(True, use_blit=True)
+
+            afm_plot.ax_fd.autoscale(enable=True)
+
+            plt.show(block=True)
+            afm_plot.fig_fd.savefig(f'{output_path}/FD_curves_{label_text}.png', bbox_inches = 'tight',
+                                    transparent = False)            
         except Exception as e:
             print(e)
             pass
-    if len(fd_file_paths) != 0:
-        #legend remove duplicates and sort
-        handles, labels = afm_plot.ax_fd.get_legend_handles_labels()
-        handles, labels = zip(*[ (handles[j], labels[j]) for j in sorted(range(len(handles)),
-                                                                         key=lambda k: labels[k],
-                                                                         reverse=True)])
-        leg_dict = dict(zip(labels[::-1],handles[::-1]))
-        afm_plot.ax_fd.get_legend().remove()
-        leg = afm_plot.ax_fd.legend(leg_dict.values(), leg_dict.keys())
-        leg.set_draggable(True, use_blit=True)
-
-        afm_plot.ax_fd.autoscale(enable=True)
-        afm_plot.fig_fd.savefig(f'{output_path}/FD_curves.png', bbox_inches = 'tight',
-                                transparent = False)
+        #afm_plot.fig_fd.show()
+##    if len(fd_file_paths) != 0:
+##        #legend remove duplicates and sort
+##        handles, labels = afm_plot.ax_fd.get_legend_handles_labels()
+##        handles, labels = zip(*[ (handles[j], labels[j]) for j in sorted(range(len(handles)),
+##                                                                         key=lambda k: labels[k],
+##                                                                         reverse=True)])
+##        leg_dict = dict(zip(labels[::-1],handles[::-1]))
+##        afm_plot.ax_fd.get_legend().remove()
+##        leg = afm_plot.ax_fd.legend(leg_dict.values(), leg_dict.keys())
+##        leg.set_draggable(True, use_blit=True)
+##
+##        afm_plot.ax_fd.autoscale(enable=True)
+##        afm_plot.fig_fd.savefig(f'{output_path}/FD_curves.png', bbox_inches = 'tight',
+##                                transparent = False)
     return data_dict
     
 def combine_fd(file_paths, output_dir=None):
