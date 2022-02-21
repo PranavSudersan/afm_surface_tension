@@ -24,7 +24,7 @@ drop_df, output_path = wetting.get_drop_prop(file_path, fd_file_paths,
 
 #get simulation data for tip geometry
 simu_df1, _ = wetting.combine_simul_data(simu_folderpath1)
-##simu_df2 = wetting.combine_simul_dirs(simu_folderpath2)
+simu_df2, simu_df_anal = wetting.combine_simul_dirs(simu_folderpath2)
 
 #calculate contact angle from fd curve
 ##label = 5 #INPUT
@@ -38,6 +38,8 @@ simu_df1, _ = wetting.combine_simul_data(simu_folderpath1)
 contact_angle = 75 #INPUT (None for auto calculation from FD)
 output_df1 = wetting.get_surface_tension(drop_df, simu_df1, contact_angle,
                                         fd_file_paths, output_path, True)
+output_df1 = wetting.get_surface_tension3(drop_df, simu_df1, simu_df_anal,
+                                          fd_file_paths, output_path, True)
 #calculate surface tension from FD fitting
 ##output_df2 = wetting.get_surface_tension2(drop_df, simu_df2,
 ##                                          tension_guess_orig=1,tolerance=1,

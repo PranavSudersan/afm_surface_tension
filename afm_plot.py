@@ -1,4 +1,6 @@
 import matplotlib
+matplotlib.use('Qt5Agg')
+from matplotlib.figure import Figure
 import copy
 import numpy as np
 #import sys
@@ -9,6 +11,7 @@ import plotly.graph_objects as go
 
 from afm_analyze import JPKAnalyze
 from plotly_viewer import PlotlyViewer
+from plot2widget import PlotWidget
 
 class AFMPlot:
     
@@ -146,11 +149,51 @@ class AFMPlot:
 
     def init_fd_plot(self): #initialize force-distance plot
         sns.set_theme(palette = 'Set2')
-        self.fig_fd = plt.figure('Line plot')
+        #self.sourceLabel = None
+        #self.fig_fd = plt.figure('Line plot')
+        self.fig_fd = Figure(figsize=(11, 5), dpi=100)
         self.ax_fd = self.fig_fd.add_subplot(111)
-        self.fig_fd.canvas.mpl_connect('close_event',
-                                       lambda event: self.on_close(event))
+        print('before')
+##        self.fig_fd.canvas.mpl_connect('close_event',
+##                                       lambda event: self.on_close(event))
+        self.plotWidget = PlotWidget(fig = self.fig_fd,
+                                         cursor1_init=0,
+                                         cursor2_init=1,
+                                         fixYLimits = False,
+                                         method = self.updatePosition)
 
+    def updatePosition(self):
+
+        # final_pos = tuple(self.plotWidget.wid.axes.transLimits.transform
+        #                   ((self.plotWidget.wid.final_pos)))
+##        if self.plotWidget.wid.clicked_artist == self.fitTextBox:
+##            self.fit_pos = list(self.fitTextBox.get_position())
+        # elif self.plotWidget.wid.clicked_artist == self.legend_main:
+        #     pos = str(tuple(self.legend_main.get_window_extent()))
+        #     self.configPlotWindow.plotDict['plot settings']['legend position'].setText(pos)
+        if self.plotWidget.wid.clicked_artist in [self.plotWidget.wid.cursor1,
+                                                    self.plotWidget.wid.cursor2]:
+##            if self.sourceLabel != None:
+            xdata =  self.xAxisData
+            x1 = self.plotWidget.wid.cursor1.get_xdata()[0]                                
+            x1_ind = np.searchsorted(xdata, [x1])[0]
+            
+##            if len(self.sourceLabel.text().split(',')) == 2:
+            if self.plotWidget.wid.cursor2 != None:
+                x2 = self.plotWidget.wid.cursor2.get_xdata()[0]
+                x2_ind = np.searchsorted(xdata, [x2])[0]
+                xstart = min(x1_ind, x2_ind)
+                xend = max(x1_ind, x2_ind)
+                xend = xend-1 if xend == len(xdata) else xend            
+##                    self.sourceLabel.setText(str(xstart) + ',' + str(xend))
+            else:
+                xstart = x1_ind-1 if x1_ind == len(xdata) else x1_ind
+                xend = None
+##                    self.sourceLabel.setText(str(xstart))
+                # self.sourceLabel = None
+            self.cursor_index = [xstart, xend]
+            print('cursors', xstart, xend)
+                
     def on_close(self, event):
         self.CLICK_STATUS = False
 
@@ -349,6 +392,27 @@ def simul_plot2(simu_df):
     
     plt.show(block=False)        
 
+
+def simul_plot3(simu_df):
+    sns.set_context("talk")
+    sns.set_style("ticks")
+    fig = plt.figure('Simulated contact angle')
+    
+    ax1 = fig.add_subplot(1,1,1)
+    mk_num = len(simu_df['Contact_Radius'].unique())
+    sns.lineplot(x='Rupture_Distance',y='Top_Angle',hue='Contact_Radius',
+                 style='Contact_Radius',data=simu_df,
+                 markers=['o']*mk_num,dashes=False,sort=False,
+                 legend='full',palette='flare', ax=ax1)
+    
+    ax1.set_title('Contact angle')
+    ax1.set_xlabel('Rupture distance, r/s')
+    ax1.set_ylabel('Contact angle')
+    leg = ax1.get_legend()
+
+    leg.set_title('Drop size, R/s')
+    
+    plt.show(block=False)       
         
 ##    def plot_2dfit(self, df, plot_params, fit_output):
 ##        x = plot_params['x']

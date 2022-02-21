@@ -1,5 +1,5 @@
 from afm_analyze import JPKAnalyze, DataFit, DataAnalyze, ImageAnalyze
-from afm_plot import AFMPlot, simul_plot, simul_plot2
+from afm_plot import AFMPlot, simul_plot, simul_plot2, simul_plot3
 from matplotlib.pyplot import cm
 from matplotlib import pyplot as plt
 import sys
@@ -88,6 +88,8 @@ def get_drop_prop(file_path, fd_file_paths = None, level_order=1, fit_range=1000
         output_dict['Adhesion (FD)'] = []
         output_dict['Slope (FD)'] = []
         output_dict['Wetted length (FD)'] = []
+        output_dict['Rupture distance (FD)'] = []
+        output_dict['Adhesion energy (FD)'] = []
         output_dict['FD X position'] = []
         output_dict['FD Y position'] = []
         output_dict['FD file'] = []
@@ -128,6 +130,8 @@ def get_drop_prop(file_path, fd_file_paths = None, level_order=1, fit_range=1000
                 output_dict['Adhesion (FD)'].append(val[0])
                 output_dict['Slope (FD)'].append(val[6])
                 output_dict['Wetted length (FD)'].append(val[7])
+                output_dict['Rupture distance (FD)'].append(val[8])
+                output_dict['Adhesion energy (FD)'].append(val[9])
                 output_dict['FD X position'].append(val[1])
                 output_dict['FD Y position'].append(val[2])
                 output_dict['FD file'].append(val[5])
@@ -135,6 +139,8 @@ def get_drop_prop(file_path, fd_file_paths = None, level_order=1, fit_range=1000
                 output_dict['Adhesion (FD)'].append(0)
                 output_dict['Slope (FD)'].append(0)
                 output_dict['Wetted length (FD)'].append(0)
+                output_dict['Rupture distance (FD)'].append(0)
+                output_dict['Adhesion energy (FD)'].append(0)
                 output_dict['FD X position'].append(0)
                 output_dict['FD Y position'].append(0)
                 output_dict['FD file'].append('')
@@ -354,8 +360,65 @@ def get_surface_tension2(output_df, simu_df, tension_guess_orig, tolerance, fd_f
     return output_df
 
 
+def get_surface_tension3(output_df, simu_df, simu_df_anal, fd_file_paths,
+                        file_path, save=False):
+    
+
+    if fd_file_paths != None:
+        output_df['F_fit'] = 0.0
+        output_df['ys/F'] = 0.0
+        output_df['Simulation contact angle'] = 0.0
+        output_df['Simulation file'] = ''
+        for i in output_df.index:
+##                R = min([3.5,round(output_df['R/s'].loc[i])]) #CHECK 3.5 (limit)
+            R = min(simu_df_anal['Contact_Radius'].unique(),
+                    key=lambda x:abs(x-output_df['R/s'].loc[i]))
+            rupture_distance = output_df['Rupture distance (FD)'].loc[i]
+            s = output_df['s'].loc[i]
+            F_adh = output_df['Adhesion (FD)'].loc[i]
+            print(output_df['R/s'].loc[i],R,s)
+        ##    R = 2.8 # R/s INPUT
+        ##    s = 2.44e-6 # s value (in meters from jumpin analysis INPUT
+            #TODO: use interpolated values instead of filtering
+            simu_df_filtered = simu_df_anal[simu_df_anal['Contact_Radius'] == R].\
+                               sort_values(by=['Rupture_Distance'])
+        ##    print(simu_df_filtered['Average Wetted Height'],simu_df_filtered['Top_Angle'])
+            #3rd order polynomial fit of rupture distance-Contact angle data
+            wa_fit = np.polyfit(simu_df_filtered['Rupture_Distance'],
+                                simu_df_filtered['Top_Angle'], 3)
+            contact_angle = np.polyval(wa_fit,rupture_distance/s)                
+            ca_nearest = min(simu_df['Top_Angle'].unique(),
+                             key=lambda x:abs(x-contact_angle))
+            print('Contact angle', contact_angle,ca_nearest)
+            simu_df_filtered2 = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index()
+        ##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
+
+            #3rd order polynomial fit of Force-Contact radius data
+            fr_fit = np.polyfit(simu_df_filtered2['Contact_Radius'],
+                                simu_df_filtered2['Force_Calc'], 3)
+            F_fit = np.polyval(fr_fit,output_df['R/s'].loc[i])
+            ys_f = -1/(2*np.pi*F_fit) #inverse
+            tension = 1000*ys_f*F_adh/s
+            
+            output_df.at[i,'Surface Tension FD (mN)'] = tension
+            output_df.at[i,'Simulation contact angle'] = contact_angle
+            output_df.at[i,'F_fit'] = F_fit
+            output_df.at[i,'ys/F'] = ys_f
+            output_df.at[i,'Simulation file'] = simu_df_filtered2['File path'].iloc[0]
+                
+    
+        print(output_df['Surface Tension FD (mN)'])
+        
+    #save final output
+    if save == True:
+        afm_filename = output_df['AFM file'].iloc[0].split('/')[-1][:-4]
+        output_df.to_excel(f'{file_path}/output_FR_rupture-{afm_filename}.xlsx', index=None)
+
+    return output_df
+
 def combine_simul_data(simu_folderpath, fit=False):
     simu_df = pd.DataFrame()
+    simu_df_anal = pd.DataFrame()
     fd_fit_dict = {}
     with os.scandir(simu_folderpath) as folder:
         for file in folder:
@@ -367,27 +430,38 @@ def combine_simul_data(simu_folderpath, fit=False):
                 if fit == True:
                     angle = df_temp['Top_Angle'].iloc[0]
                     Rs = df_temp['Contact_Radius'].iloc[0]
+                    #Polynomial fit of FD data (CHECK ORDER!)
                     fd_fit_dict[angle] = np.polyfit(df_temp['Height'],
-                                                    df_temp['Force_Calc'], 3)
-                    rupture_distance = max(np.roots(fd_fit_dict[angle]))
+                                                    df_temp['Force_Calc'], 2)
+                    fd_roots = np.roots(fd_fit_dict[angle])
+                    fd_roots_filtered = fd_roots[(fd_roots>0.2) & (fd_roots<1)]
+                    rupture_distance = min(fd_roots_filtered)
                     print(Rs, angle, rupture_distance) #CHECK!
+                    simu_df_anal_temp = pd.DataFrame({'Contact_Radius':[Rs],
+                                                      'Top_Angle':[angle],
+                                                      'Rupture_Distance':[rupture_distance]})
+                    simu_df_anal = simu_df_anal.append(simu_df_anal_temp)
                  
     simu_df['Simulation folder'] = simu_folderpath
     #simul_plot(simu_df)
-    return simu_df, fd_fit_dict
+
+    return simu_df, simu_df_anal
 
 #combine data from subfolders
 def combine_simul_dirs(simu_folderpath):
     simu_df = pd.DataFrame()
+    simu_df_anal = pd.DataFrame()
     with os.scandir(simu_folderpath) as folder:
         for fdr in folder:
             if fdr.is_dir():
-                df_temp, fd_fit_dict = combine_simul_data(fdr.path,
-                                                          fit=True)
+                df_temp, simu_df_anal_temp = combine_simul_data(fdr.path,
+                                                                fit=True)
                 #simul_plot2(df_temp)
                 simu_df = simu_df.append(df_temp)
+                simu_df_anal = simu_df_anal.append(simu_df_anal_temp)
     #simu_df.to_excel('simu_out.xlsx')
-    return simu_df
+    #simul_plot3(simu_df_anal)
+    return simu_df, simu_df_anal
 
 #get adhesion and slope from force data files
 def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
@@ -426,7 +500,8 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
             label = int(img_anal.masked[y_index,x_index])
             #get adhesion
             force_data = df['Force'].to_numpy()
-            adhesion = force_data[-1] - force_data.min()
+            force_zero = np.average(force_data[:100]) #CHECK RANGE FOR ZERO FORCE
+            adhesion = force_zero - force_data.min()
 
             #get FD slope at retract
 ##            num_points = len(df.index)
@@ -447,12 +522,6 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
             wetted_length = (df['Force'].iloc[0]-retract_fit[1])/retract_fit[0] - \
                             d_retract.iloc[0]
 
-            #get area under curve
-            force_shifted = [x-force_data[-1] for x in force_data]
-            energy_slice = slice(int(num_points/2), num_points-1)
-            energy_adhesion = integrate.simps(force_shifted[energy_slice],
-                                              df['Distance'][energy_slice])
-            print('energy',label, energy_adhesion)
             #plot fit line
             label_text = str(label)
             
@@ -460,13 +529,13 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
 ##            ylim = afm_plot.ax_fd.get_ylim()
 ##            afm_plot.ax_fd.plot(d_retract,f_fit, label=label_text, color=colors[i])
 ##            afm_plot.ax_fd.set_ylim(ylim)
-            afm_plot.ax_fd.fill_between(df['Distance'][energy_slice],
-                                        force_data[-1],
-                                        force_data[energy_slice],
-                                        color = 'black', alpha=0.5)
+
+            afm_plot.xAxisData = d_retract.to_numpy()
+            afm_plot.plotWidget.wid.updateCursor(afm_plot.plotWidget.wid.cursor1,
+                                                 d_retract.iloc[0])
+            afm_plot.plotWidget.wid.updateCursor(afm_plot.plotWidget.wid.cursor2,
+                                                 d_retract.iloc[-1])
             
-            data_dict[label] = [adhesion, x_rot, y_rot, x_real, y_real,
-                                file_path, retract_fit[0], wetted_length]
 
             #legend remove duplicates and sort
             handles, labels = afm_plot.ax_fd.get_legend_handles_labels()
@@ -479,10 +548,39 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
             leg.set_draggable(True, use_blit=True)
 
             afm_plot.ax_fd.autoscale(enable=True)
+            afm_plot.ax_fd.relim()
+            afm_plot.ax_fd.autoscale_view()
 
-            plt.show(block=True)
+            afm_plot.plotWidget.wid.draw_idle()
+            #plt.show()
+            afm_plot.ax_fd.axhline(y=force_zero, linestyle=':')
+            afm_plot.plotWidget.showWindow()
+
+            cursor_index = afm_plot.cursor_index #positions of cursors
+            rupture_distance = d_retract.iloc[cursor_index[1]] - d_retract.iloc[cursor_index[0]]
+            print('rupture distance', rupture_distance)
+            
+            #get area under curve
+            force_shifted = [x-force_zero for x in force_data]
+            energy_slice = slice(int(num_points/2)+cursor_index[0],
+                                 int(num_points/2)+cursor_index[1])
+            energy_adhesion = integrate.simps(force_shifted[energy_slice],
+                                              df['Distance'][energy_slice])
+            print('energy',label, energy_adhesion)
+            
+            afm_plot.ax_fd.fill_between(df['Distance'][energy_slice],
+                                        force_zero,
+                                        force_data[energy_slice],
+                                        color = 'black', alpha=0.5)
+            
+            #plt.show(block=True)
             afm_plot.fig_fd.savefig(f'{output_path}/FD_curves_{label_text}.png', bbox_inches = 'tight',
-                                    transparent = False)            
+                                    transparent = False)
+            afm_plot.CLICK_STATUS = False #done to reinitialize fd plot
+
+            data_dict[label] = [adhesion, x_rot, y_rot, x_real, y_real,
+                                file_path, retract_fit[0], wetted_length,
+                                rupture_distance, energy_adhesion]
         except Exception as e:
             print(e)
             pass
