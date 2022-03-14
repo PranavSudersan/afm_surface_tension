@@ -1,5 +1,5 @@
 from afm_analyze import JPKAnalyze, DataFit, DataAnalyze, ImageAnalyze
-from afm_plot import AFMPlot, simul_plot, simul_plot2, simul_plot3
+from afm_plot import AFMPlot, simul_plot
 from matplotlib.pyplot import cm
 from matplotlib import pyplot as plt
 import sys
@@ -9,7 +9,7 @@ import numpy as np
 from scipy import integrate
 
 #drop volume/contact radius/contact angle
-def get_drop_prop(file_path, fd_file_paths = None, level_order=1, fit_range=10000):
+def get_drop_prop(file_path, output_dir, fd_file_paths = None, level_order=1, fd_fit_range=10000):
     #import data
     jpk_data = JPKAnalyze(file_path, None)
 
@@ -29,12 +29,14 @@ def get_drop_prop(file_path, fd_file_paths = None, level_order=1, fit_range=1000
     ##print('Max height:', max_height)
     ##print('Zero height:', zero_height)
 
-    #make output directory
-    file_dir = os.path.dirname(file_path)
-    file_name = os.path.basename(file_path)
-    output_dir = f'{file_dir}/analysis/{file_name}'
-    os.makedirs(output_dir, exist_ok=True)
+#     #make output directory
+#     if file_dir == '':
+#         file_dir = os.path.dirname(file_path) + '/analysis'
+#     file_name = os.path.basename(file_path)
+#     output_dir = f'{file_dir}/{file_name}'
+#     os.makedirs(output_dir, exist_ok=True)
     
+    fig_list = []
     #plot data
     afm_plot = AFMPlot(jpk_data, output_path=output_dir)
     points_data = afm_plot.points_data #collect points to fit plane
@@ -63,6 +65,7 @@ def get_drop_prop(file_path, fd_file_paths = None, level_order=1, fit_range=1000
                            output_path=output_dir) #using cutoff from clustering initially
     ##img_anal.segment_image(bg=[0, 1e-7],
     ##                       fg=[3e-7, 4e-7])
+    fig_list.append(img_anal.fig)
     
     ###fit data
     data_fit = DataFit(jpk_data, volume_mode,
@@ -70,20 +73,20 @@ def get_drop_prop(file_path, fd_file_paths = None, level_order=1, fit_range=1000
                        zero = zero_height,
                        output_path=output_dir)#,"Height>=0.5e-7",
                        #guess=[1.5e-5,-1e-5],bounds=([1e-6,-np.inf],[1e-4,np.inf]),
+    fig_list.append(data_fit.fig)
 
-    
     #output params
     output_dict = {'Label': [], 'Curvature':[], 'Contact Radius': [],
                    'Max Height': [], 'Max Height raw': [],
                    'Volume': [], 'Volume raw':[],
-                   'Contact angle': [], 'Max Adhesion': []}
+                   'Drop contact angle': [], 'Max Adhesion': []}
     print('label','h','h_raw','V','V_raw')
 
     if fd_file_paths != None:                   
         fd_adhesion_dict = get_adhesion_from_fd(fd_file_paths, jpk_data,
                                                 img_anal, segment_mode,
                                                 rotation_info = rotation_info,
-                                                fit_range = fit_range,
+                                                fit_range = fd_fit_range,
                                                 output_path = output_dir)
         output_dict['Adhesion (FD)'] = []
         output_dict['Slope (FD)'] = []
@@ -121,7 +124,7 @@ def get_drop_prop(file_path, fd_file_paths = None, level_order=1, fit_range=1000
         output_dict['Max Height raw'].append(h_raw)
         output_dict['Volume'].append(V)
         output_dict['Volume raw'].append(V_raw)
-        output_dict['Contact angle'].append(a)
+        output_dict['Drop contact angle'].append(a)
         output_dict['Max Adhesion'].append(f_max)
 
         if fd_file_paths != None:
@@ -151,7 +154,7 @@ def get_drop_prop(file_path, fd_file_paths = None, level_order=1, fit_range=1000
     output_df['AFM file'] = file_path
     #file_name = file_path.split('/')[-1][:-len(jpk_data.file_format)-1]
 
-    return output_df, output_dir
+    return output_df, fig_list
 ##    print('s:', output_df['s'], 'R/s', output_df['R/s'])
 
 def get_surface_tension(output_df, simu_df, contact_angle, fd_file_paths,
@@ -360,15 +363,15 @@ def get_surface_tension2(output_df, simu_df, tension_guess_orig, tolerance, fd_f
     return output_df
 
 
-def get_surface_tension3(output_df, simu_df, simu_df_anal, fd_file_paths,
+def get_surface_tension3(output_df, simu_df_anal, fixed_contact_angle, fd_file_paths,
                         file_path, save=False):
     
 
     if fd_file_paths != None:
-        output_df['F_fit'] = 0.0
-        output_df['ys/F'] = 0.0
-        output_df['Simulation contact angle'] = 0.0
-        output_df['Simulation file'] = ''
+#         output_df['F_fit'] = 0.0
+#         output_df['ys/F'] = 0.0
+#         output_df['Simulation contact angle'] = 0.0
+#         output_df['Simulation file'] = ''
         for i in output_df.index:
 ##                R = min([3.5,round(output_df['R/s'].loc[i])]) #CHECK 3.5 (limit)
             R = min(simu_df_anal['Contact_Radius'].unique(),
@@ -376,7 +379,7 @@ def get_surface_tension3(output_df, simu_df, simu_df_anal, fd_file_paths,
             rupture_distance = output_df['Rupture distance (FD)'].loc[i]
             s = output_df['s'].loc[i]
             F_adh = output_df['Adhesion (FD)'].loc[i]
-            print(output_df['R/s'].loc[i],R,s)
+            #print(output_df['R/s'].loc[i],R,s)
         ##    R = 2.8 # R/s INPUT
         ##    s = 2.44e-6 # s value (in meters from jumpin analysis INPUT
             #TODO: use interpolated values instead of filtering
@@ -386,37 +389,50 @@ def get_surface_tension3(output_df, simu_df, simu_df_anal, fd_file_paths,
             #3rd order polynomial fit of rupture distance-Contact angle data
             wa_fit = np.polyfit(simu_df_filtered['Rupture_Distance'],
                                 simu_df_filtered['Top_Angle'], 3)
-            contact_angle = np.polyval(wa_fit,rupture_distance/s)                
-            ca_nearest = min(simu_df['Top_Angle'].unique(),
-                             key=lambda x:abs(x-contact_angle))
-            print('Contact angle', contact_angle,ca_nearest)
-            simu_df_filtered2 = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index()
-        ##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
-
-            #3rd order polynomial fit of Force-Contact radius data
-            fr_fit = np.polyfit(simu_df_filtered2['Contact_Radius'],
-                                simu_df_filtered2['Force_Calc'], 3)
-            F_fit = np.polyval(fr_fit,output_df['R/s'].loc[i])
-            ys_f = -1/(2*np.pi*F_fit) #inverse
-            tension = 1000*ys_f*F_adh/s
+            contact_angle = np.polyval(wa_fit,rupture_distance/s)
             
-            output_df.at[i,'Surface Tension FD (mN)'] = tension
-            output_df.at[i,'Simulation contact angle'] = contact_angle
-            output_df.at[i,'F_fit'] = F_fit
-            output_df.at[i,'ys/F'] = ys_f
-            output_df.at[i,'Simulation file'] = simu_df_filtered2['File path'].iloc[0]
+            
+#             ca_nearest = min(simu_df['Top_Angle'].unique(),
+#                              key=lambda x:abs(x-contact_angle))
+#             print('Contact angle', contact_angle,ca_nearest)
+#             simu_df_filtered2 = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index()
+#         ##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
+
+#             #5th order polynomial fit of Force-Contact radius data
+#             fr_fit = np.polyfit(simu_df_filtered2['Contact_Radius'],
+#                                 simu_df_filtered2['Force_Calc'], 5)
+#             F_fit = np.polyval(fr_fit,output_df['R/s'].loc[i])
+#             ys_f = -1/(2*np.pi*F_fit) #inverse
+#             tension = 1000*ys_f*F_adh/s
+            
+            #3rd order polynomiak fit of adhesion-contact angle data
+            fa_fit = np.polyfit(simu_df_filtered['Top_Angle'],
+                                simu_df_filtered['Adhesion'], 3)
+            F_fit_actual = np.polyval(fa_fit,contact_angle)
+            tension_actual = 1000*(-1/(2*np.pi*F_fit_actual))*F_adh/s
+            F_fit_fixed = np.polyval(fa_fit,fixed_contact_angle)
+            tension_fixed = 1000*(-1/(2*np.pi*F_fit_fixed))*F_adh/s
+            
+            output_df.at[i,'Simulation R/s'] = R
+            output_df.at[i,'Surface Tension (rupture, mN)'] = tension_actual
+            output_df.at[i,'Tip contact angle (rupture)'] = contact_angle
+            output_df.at[i,'F_fit_actual'] = F_fit_actual
+            output_df.at[i,'Surface Tension (fixed, mN)'] = tension_fixed
+            output_df.at[i,'Tip contact angle (fixed)'] = fixed_contact_angle            
+            output_df.at[i,'F_fit_fixed'] = F_fit_fixed
+            output_df.at[i,'Simulation file'] = simu_df_filtered['File path'].iloc[0]
                 
     
-        print(output_df['Surface Tension FD (mN)'])
+        #print(output_df['Surface Tension FD (mN)'])
         
     #save final output
     if save == True:
         afm_filename = output_df['AFM file'].iloc[0].split('/')[-1][:-4]
-        output_df.to_excel(f'{file_path}/output_FR_rupture-{afm_filename}.xlsx', index=None)
+        output_df.to_excel(f'{file_path}/output_rupture-{afm_filename}.xlsx', index=None)
 
     return output_df
 
-def combine_simul_data(simu_folderpath, fit=False):
+def combine_simul_data(simu_folderpath, fit=False, plot=False):
     simu_df = pd.DataFrame()
     simu_df_anal = pd.DataFrame()
     fd_fit_dict = {}
@@ -430,38 +446,84 @@ def combine_simul_data(simu_folderpath, fit=False):
                 if fit == True:
                     angle = df_temp['Top_Angle'].iloc[0]
                     Rs = df_temp['Contact_Radius'].iloc[0]
+                    adhesion = min(df_temp['Force_Calc'])
                     #Polynomial fit of FD data (CHECK ORDER!)
                     fd_fit_dict[angle] = np.polyfit(df_temp['Height'],
                                                     df_temp['Force_Calc'], 2)
                     fd_roots = np.roots(fd_fit_dict[angle])
-                    fd_roots_filtered = fd_roots[(fd_roots>0.2) & (fd_roots<1)]
+                    fd_roots_filtered = fd_roots[(fd_roots>0) & (fd_roots<2)]
                     rupture_distance = min(fd_roots_filtered)
-                    print(Rs, angle, rupture_distance) #CHECK!
+                    #print(Rs, angle, rupture_distance) #CHECK!
                     simu_df_anal_temp = pd.DataFrame({'Contact_Radius':[Rs],
                                                       'Top_Angle':[angle],
-                                                      'Rupture_Distance':[rupture_distance]})
+                                                      'Adhesion': [adhesion],
+                                                      'Rupture_Distance':[rupture_distance],
+                                                     'File path': [file.path]})
                     simu_df_anal = simu_df_anal.append(simu_df_anal_temp)
-                 
+    
+    simu_df['Average tip angle'] = (simu_df['Top_Angle6']+simu_df['Top_Angle7']+
+                                    simu_df['Top_Angle8']+simu_df['Top_Angle9'])/4
     simu_df['Simulation folder'] = simu_folderpath
-    #simul_plot(simu_df)
+    if plot == True:
+        Rs = simu_df['Contact_Radius'].iloc[0]
+        fig = simul_plot(simu_df,
+                         x_var='Height',
+                         y_var='Force_Calc',#Force_Calc,Average Wetted Height,Average tip angle
+                         hue_var='Top_Angle',
+                         title=f'Simulation data (FD): R/s={Rs}',
+                         xlabel='Height, h/s',
+                         ylabel=r'$F/2\pi \gamma s$',
+                         leglabel='Contact angle',
+                         fit_order=2)
+#     elif plot_type == 'FR':
+#         fig = simul_plot1(simu_df)
+    else:
+        fig = None
 
-    return simu_df, simu_df_anal
+    return simu_df, simu_df_anal, fig
 
 #combine data from subfolders
-def combine_simul_dirs(simu_folderpath):
+def combine_simul_dirs(simu_folderpath, plot=False):
     simu_df = pd.DataFrame()
     simu_df_anal = pd.DataFrame()
+    #plot_type = 'FD' if plot == True else None
+    fig_list = []
     with os.scandir(simu_folderpath) as folder:
         for fdr in folder:
             if fdr.is_dir():
-                df_temp, simu_df_anal_temp = combine_simul_data(fdr.path,
-                                                                fit=True)
+                df_temp, simu_df_anal_temp, fig = combine_simul_data(fdr.path,
+                                                                fit=True,
+                                                                plot=plot)
                 #simul_plot2(df_temp)
                 simu_df = simu_df.append(df_temp)
                 simu_df_anal = simu_df_anal.append(simu_df_anal_temp)
+                fig_list.append(fig)
     #simu_df.to_excel('simu_out.xlsx')
-    #simul_plot3(simu_df_anal)
-    return simu_df, simu_df_anal
+
+    if plot == True:
+        fig1 = simul_plot(simu_df_anal,
+                          x_var='Rupture_Distance',
+                          y_var='Top_Angle',
+                          hue_var='Contact_Radius',
+                          title='Simulation data: rupture distance',
+                          xlabel='Rupture distance, r/s', 
+                          ylabel='Contact angle', 
+                          leglabel='Drop size, R/s',
+                          fit_order=3)
+        fig_list.append(fig1)
+        
+        fig2 = simul_plot(simu_df_anal,
+                          x_var='Top_Angle',
+                          y_var='Adhesion',
+                          hue_var='Contact_Radius',
+                          title='Simulation data: adhesion',
+                          xlabel='Contact angle', 
+                          ylabel=r'$F/2\pi \gamma s$', 
+                          leglabel='Drop size, R/s',
+                          fit_order=3)
+        fig_list.append(fig2)
+
+    return simu_df, simu_df_anal, fig_list
 
 #get adhesion and slope from force data files
 def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
@@ -525,7 +587,7 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
             #plot fit line
             label_text = str(label)
             
-            afm_plot.plot_line(df, plot_params, label_text=label_text, color=colors[i])
+            afm_plot.plot_line(df, plot_params, label_text=label_text, color='r')
 ##            ylim = afm_plot.ax_fd.get_ylim()
 ##            afm_plot.ax_fd.plot(d_retract,f_fit, label=label_text, color=colors[i])
 ##            afm_plot.ax_fd.set_ylim(ylim)
@@ -623,3 +685,14 @@ def combine_fd(file_paths, output_dir=None):
     afm_plot.fig_fd.show()
         
 #jpk_data.data_zip.close()
+def combine_result_spreadsheets(folder_paths):
+    summary_df = pd.DataFrame()
+    for f_p in folder_paths:
+        with os.scandir(f_p) as folder:
+            for file in folder:
+                if file.is_file() and file.path.endswith( ('.xlsx') ):
+                    df_temp = pd.read_excel(file.path)
+                    df_temp['Folder name'] = os.path.basename(f_p)
+                    df_temp['File path'] = file.path
+                    summary_df = summary_df.append(df_temp)
+    return summary_df

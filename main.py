@@ -15,8 +15,8 @@ fd_file_paths, _ = QFileDialog.getOpenFileNames(caption='Select JPK force data')
 ##fd_file_path, _ = QFileDialog.getOpenFileName()
 ##fd_file_path = '../20210420 silicone oil tip-pdms brush/force-save-area4-f2_s10-2021.04.20-17.57.38.004.jpk-force'
 ##
-simu_folderpath1 = 'E:/Work/Surface Evolver/afm_pyramid/data/20220113_rfesp_np_height0/'
-simu_folderpath2 = 'E:/Work/Surface Evolver/afm_pyramid/data/20220201_rfesp_np_fd/'
+simu_folderpath1 = 'E:/Work/Surface Evolver/afm_pyramid/data/20220307_rfesp_np_height0/'
+simu_folderpath2 = 'E:/Work/Surface Evolver/afm_pyramid/data/20220306_rfesp_np_fd/'
 
 #drop analysis of AFM data
 drop_df, output_path = wetting.get_drop_prop(file_path, fd_file_paths,

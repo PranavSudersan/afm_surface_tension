@@ -52,6 +52,7 @@ class AFMPlot:
                                  aggfunc='first')
         
         #plot
+        plt.rcParams.update(plt.rcParamsDefault)
         fig2d = plt.figure(f'{title}')
         ax2d = fig2d.add_subplot(111)
         im2d = ax2d.pcolormesh(df_data.columns, df_data.index,
@@ -317,63 +318,79 @@ class AFMPlot:
                           autosize=True)
 
         fig.write_html(f'{file_path}/3d_jumpin_distance.html')
-
+        
         #self.plotwin  = PlotlyViewer(fig)
+        
+        return fig
 
-def simul_plot(simu_df):
+def simul_plot1(simu_df):
     sns.set_context("talk")
     sns.set_style("ticks")
-    fig = plt.figure('Simulation data')
-    
-    ax1 = fig.add_subplot(1,2,1)
+##    fig = plt.figure('Simulation data')
+##    
+##    ax1 = fig.add_subplot(1,1,1)
     mk_num = len(simu_df['Top_Angle'].unique())
-    sns.lineplot(x='Contact_Radius',y='Force_Calc',hue='Top_Angle',
-                 style='Top_Angle',data=simu_df,
-                 markers=['o']*mk_num,dashes=False,
-                 legend='full',palette='flare', ax=ax1)
+    g = sns.lmplot(x='Contact_Radius',y='Force_Calc',hue='Top_Angle',
+                 #style='Top_Angle',
+               data=simu_df,
+                 #markers=['o']*mk_num,dashes=False,
+                 legend='full',palette='flare',
+               #ax=ax1,
+               order=5, ci=None,
+                   height=8, aspect=1.3)
+    ax1 = g.ax
     ax1.axhline(y=0, color='0.8', dashes=(1, 1), zorder=0)
     
-    ax1.set_title('Adhesion force')
+    ax1.set_title('Simulation data: Adhesion force')
     ax1.set_xlabel('Drop size, R/s')
     ax1.set_ylabel(r'$F/2\pi \gamma s$')
-    leg = ax1.get_legend()
-    leg.remove()
+    leg = g.legend
+    #leg = ax1.get_legend()
+##    leg.remove()
     
-    ax2 = fig.add_subplot(1,2,2)
-    mk_num = len(simu_df['Top_Angle'].unique())
-    sns.lineplot(x='Contact_Radius',
-                 y='Average Wetted Height',hue='Top_Angle',
-                 style='Top_Angle',data=simu_df,
-                 markers=['o']*mk_num,dashes=False,
-                 legend='full',palette='flare', ax=ax2)
-
-    ax2.set_title('Wetted length')
-    ax2.set_xlabel('Drop size, R/s')
-    ax2.set_ylabel('w/s')
-    leg = ax2.get_legend()
+##    ax2 = fig.add_subplot(1,2,2)
+##    mk_num = len(simu_df['Top_Angle'].unique())
+##    sns.lineplot(x='Contact_Radius',
+##                 y='Average Wetted Height',hue='Top_Angle',
+##                 style='Top_Angle',data=simu_df,
+##                 markers=['o']*mk_num,dashes=False,
+##                 legend='full',palette='flare', ax=ax2)
+##
+##    ax2.set_title('Wetted length')
+##    ax2.set_xlabel('Drop size, R/s')
+##    ax2.set_ylabel('w/s')
+##    leg = ax2.get_legend()
     leg.set_title('Contact angle')
-    
-    plt.show(block=False)
+    fig = g.fig
+    #plt.show(block=True)
+
+    return fig
 
 
 def simul_plot2(simu_df):
     sns.set_context("talk")
     sns.set_style("ticks")
     Rs = simu_df['Contact_Radius'].iloc[0]
-    fig = plt.figure(f'Simulation data FD Rs={Rs}')
-    
-    ax1 = fig.add_subplot(1,1,1)
+##    fig = plt.figure(f'Simulation data FD Rs={Rs}')
+##    
+##    ax1 = fig.add_subplot(1,1,1)
     mk_num = len(simu_df['Top_Angle'].unique())
-    sns.lineplot(x='Height',y='Force_Calc',hue='Top_Angle',
-                 style='Top_Angle',data=simu_df,
-                 markers=['o']*mk_num,dashes=False,
-                 legend='full',palette='flare', ax=ax1)
+    g = sns.lmplot(x='Height',y='Force_Calc',hue='Top_Angle',
+                 #style='Top_Angle',
+               data=simu_df,
+                 #markers=['o']*mk_num,dashes=False,
+                 legend='full',palette='flare',
+               #ax=ax1,
+               order=2, ci=None,
+                   height=8, aspect=1.3)
+    ax1 = g.ax
     ax1.axhline(y=0, color='0.8', dashes=(1, 1), zorder=0)
     
-    ax1.set_title('Adhesion force')
+    ax1.set_title(f'Simulation data (FD): R/s={Rs}')
     ax1.set_xlabel('Height, h/s')
     ax1.set_ylabel(r'$F/2\pi \gamma s$')
-    leg = ax1.get_legend()
+    #leg = ax1.get_legend()
+    leg = g.legend
 ##    leg.remove()
 ##    
 ##    ax2 = fig.add_subplot(1,2,2)
@@ -389,31 +406,61 @@ def simul_plot2(simu_df):
 ##    ax2.set_ylabel('w/s')
 ##    leg = ax2.get_legend()
     leg.set_title('Contact angle')
-    
-    plt.show(block=False)        
+    fig = g.fig
+    #plt.show(block=True)
+
+    return fig
 
 
 def simul_plot3(simu_df):
     sns.set_context("talk")
     sns.set_style("ticks")
-    fig = plt.figure('Simulated contact angle')
-    
-    ax1 = fig.add_subplot(1,1,1)
+##    fig = plt.figure('Simulated contact angle')
+##    
+##    ax1 = fig.add_subplot(1,1,1)
     mk_num = len(simu_df['Contact_Radius'].unique())
-    sns.lineplot(x='Rupture_Distance',y='Top_Angle',hue='Contact_Radius',
-                 style='Contact_Radius',data=simu_df,
-                 markers=['o']*mk_num,dashes=False,sort=False,
-                 legend='full',palette='flare', ax=ax1)
-    
-    ax1.set_title('Contact angle')
+    g = sns.lmplot(x='Rupture_Distance',y='Top_Angle',hue='Contact_Radius',
+                 #style='Contact_Radius',
+                 data=simu_df,
+                 #markers=['o']*mk_num,dashes=False,sort=False,
+                 legend='full',palette='flare',
+                 #ax=ax1,
+                 order=3, ci=None)
+    ax1 = g.ax
+    ax1.set_title('Simulation data: rupture distance')
     ax1.set_xlabel('Rupture distance, r/s')
     ax1.set_ylabel('Contact angle')
-    leg = ax1.get_legend()
+    #leg = ax1.get_legend()
+    leg = g.legend
 
     leg.set_title('Drop size, R/s')
-    
-    plt.show(block=False)       
-        
+    fig = g.fig
+    #plt.show(block=True)
+
+    return fig
+
+
+def simul_plot(simu_df, x_var, y_var, hue_var, title, xlabel, ylabel, leglabel, fit_order=None):
+    sns.set_context("talk")
+    sns.set_style("ticks")
+
+    g = sns.lmplot(x=x_var,y=y_var,hue=hue_var,
+                   data=simu_df,
+                   legend='full',palette='flare',
+                   order=fit_order, ci=None,
+                   height=8, aspect=1.3)
+    ax1 = g.ax
+    ax1.set_title(title)
+    ax1.set_xlabel(xlabel)
+    ax1.set_ylabel(ylabel)
+
+    leg = g.legend
+    leg.set_title(leglabel)
+    fig = g.fig
+    #plt.show(block=True)
+
+    return fig
+
 ##    def plot_2dfit(self, df, plot_params, fit_output):
 ##        x = plot_params['x']
 ##        y = plot_params['y']

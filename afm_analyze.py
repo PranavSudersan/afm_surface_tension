@@ -291,8 +291,8 @@ class DataFit:
         z_zero = 0*x_zero + zero
         self.fit_data_full['zero'] = {x: x_zero, y: y_zero, z: z_zero}
         #plot
-        afm_plot.plot_2dfit(self.fit_data_full, df_data, plot_params,
-                            file_path=output_path)
+        self.fig = afm_plot.plot_2dfit(self.fit_data_full, df_data, plot_params,
+                                       file_path=output_path)
 
     def sphere_rc(self, X, R, C): #sphere function (only R and C)
         i, j, k = np.argmax(X, axis=0)
@@ -530,6 +530,7 @@ class ImageAnalyze:
             self.ax.text(minc,minr,str(region.label),color='white',fontsize=12)
         
         self.ax.invert_yaxis()
+        self.ax.grid(False)
 
         #create sliders for tweaking fg/bg params
         axis_bg = self.fig.add_axes([0.10, 0.1, 0.8, 0.03], facecolor='lightgoldenrodyellow')        
@@ -584,6 +585,7 @@ class ImageAnalyze:
             self.ax.text(minc,minr,str(region.label),color='white',fontsize=12)
         
         self.ax.invert_yaxis()
+        self.ax.grid(False)
         self.fig.canvas.draw_idle()
 
     def show_histogram(self):

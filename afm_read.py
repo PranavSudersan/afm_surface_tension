@@ -36,7 +36,7 @@ class JPKRead:
 
         matlab_output = eng.open_JPK(filepath)
         z_data = matlab_output['Height_measured_']['Trace']['AFM_image']
-        print(matlab_output['header'], matlab_output.keys())
+        #print(matlab_output['header'], matlab_output.keys())
         x0 = matlab_output['header']['x_Origin']
         y0 = matlab_output['header']['y_Origin']
         x_len = matlab_output['header']['x_scan_length']
