@@ -1,4 +1,6 @@
 import matplotlib
+matplotlib.use('Qt5Agg')
+from matplotlib.figure import Figure
 import copy
 import numpy as np
 #import sys
@@ -9,6 +11,7 @@ import plotly.graph_objects as go
 
 from afm_analyze import JPKAnalyze
 from plotly_viewer import PlotlyViewer
+from plot2widget import PlotWidget
 
 class AFMPlot:
     
@@ -29,25 +32,27 @@ class AFMPlot:
                 plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
                 for plot_type in plot_params['type']:
                     PLOT_DICT[plot_type](jpk_anal.df[mode], plot_params,
-                                         file_path=output_path)
+                                         file_path=output_path,
+                                         points=plot_params['points_flag'])
 
-            plt.show(block=False)
+            #plt.show(block=False)
 ##        plt.pause(0.05)
 ##        if self.plotwin != None:
 ####            self.plotwin.show()
 ##            self.plotwin.app.exec_()
     
-    def plot_2d(self, df, plot_params, file_path=None):
+    def plot_2d(self, df, plot_params, file_path=None, points=False):
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
         title = plot_params['title']
+        self.points_data = np.empty((0, 3), float)
         #organize data into matrix for heatmap plot
         df_data = df.pivot_table(values=z, index=y, columns=x,
                                  aggfunc='first')
-        df_reference = df.pivot_table(values='Segment folder', index=y,
-                                      columns=x, aggfunc='first')
+        
         #plot
+        plt.rcParams.update(plt.rcParamsDefault)
         fig2d = plt.figure(f'{title}')
         ax2d = fig2d.add_subplot(111)
         im2d = ax2d.pcolormesh(df_data.columns, df_data.index,
@@ -55,7 +60,7 @@ class AFMPlot:
         ax2d.ticklabel_format(style='sci', scilimits=(0,0))
         ax2d.set_xlabel(x)
         ax2d.set_ylabel(y)
-        fig2d.colorbar(im2d, ax=ax2d, label=z)
+        fig2d.colorbar(im2d, ax=ax2d, label=z, format='%.1e')
         fig2d.suptitle(title)
 
         fig2d.savefig(f'{file_path}/{title}.png', bbox_inches = 'tight',
@@ -67,16 +72,24 @@ class AFMPlot:
 ##                                 dtype=np.uint8, sep='')
 ##        rgb_data = rgb_data.reshape(canvas.get_width_height()[::-1] + (3,))
 
-        
-        self.cid = fig2d.canvas.mpl_connect('button_press_event',
-                                       lambda event: self.on_click(event,
-                                                                   df_reference))
+        if points == False:
+            df_reference = df.pivot_table(values='Segment folder', index=y,
+                                          columns=x, aggfunc='first')
+            self.cid = fig2d.canvas.mpl_connect('button_press_event',
+                                           lambda event: self.on_click(event,
+                                                                       df_reference))
+        else:
+            self.cid = fig2d.canvas.mpl_connect('button_press_event',
+                                           lambda event: self.on_click(event,
+                                                                       df_data, points))
+                
         #BUG: program doesn't end after callbacks
         fig2d.canvas.mpl_connect('close_event',
                                  lambda event: self.on_figclose(event, fig2d))
+        plt.show(block=points)
 
 
-    def plot_3d(self, df, plot_params, file_path=None):
+    def plot_3d(self, df, plot_params, file_path=None, points=False):
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
@@ -113,7 +126,8 @@ class AFMPlot:
 ##        self.fig3d.suptitle(plot_params['title'])
 ##        ##fig3d.colorbar(surf, shrink=0.5, aspect=5)
 
-    def plot_line(self, df, plot_params, label_text=None, file_path=None):
+    def plot_line(self, df, plot_params, label_text=None, file_path=None, points=False,
+                  color=None):
         x = plot_params['x']
         y = plot_params['y']
         style = plot_params['style']
@@ -124,21 +138,63 @@ class AFMPlot:
 
         sns.lineplot(x=x, y=y, style=style,
                      data=df, ax=self.ax_fd,
-                     label = label_text, sort=False)
+                     label = label_text, sort=False,
+                     color=color)
 ##        self.ax_fd.plot(df[x], df[y])
         self.ax_fd.ticklabel_format(style='sci', scilimits=(0,0))
         self.ax_fd.set_xlabel(x)
         self.ax_fd.set_ylabel(y)
         self.fig_fd.suptitle(plot_params['title'])
+        #plt.show(block=False)
 ##        df.to_excel('test-fd-data.xlsx')
 
     def init_fd_plot(self): #initialize force-distance plot
         sns.set_theme(palette = 'Set2')
-        self.fig_fd = plt.figure('Line plot')
+        #self.sourceLabel = None
+        #self.fig_fd = plt.figure('Line plot')
+        self.fig_fd = Figure(figsize=(11, 5), dpi=100)
         self.ax_fd = self.fig_fd.add_subplot(111)
-        self.fig_fd.canvas.mpl_connect('close_event',
-                                       lambda event: self.on_close(event))
+        print('before')
+##        self.fig_fd.canvas.mpl_connect('close_event',
+##                                       lambda event: self.on_close(event))
+        self.plotWidget = PlotWidget(fig = self.fig_fd,
+                                         cursor1_init=0,
+                                         cursor2_init=1,
+                                         fixYLimits = False,
+                                         method = self.updatePosition)
 
+    def updatePosition(self):
+
+        # final_pos = tuple(self.plotWidget.wid.axes.transLimits.transform
+        #                   ((self.plotWidget.wid.final_pos)))
+##        if self.plotWidget.wid.clicked_artist == self.fitTextBox:
+##            self.fit_pos = list(self.fitTextBox.get_position())
+        # elif self.plotWidget.wid.clicked_artist == self.legend_main:
+        #     pos = str(tuple(self.legend_main.get_window_extent()))
+        #     self.configPlotWindow.plotDict['plot settings']['legend position'].setText(pos)
+        if self.plotWidget.wid.clicked_artist in [self.plotWidget.wid.cursor1,
+                                                    self.plotWidget.wid.cursor2]:
+##            if self.sourceLabel != None:
+            xdata =  self.xAxisData
+            x1 = self.plotWidget.wid.cursor1.get_xdata()[0]                                
+            x1_ind = np.searchsorted(xdata, [x1])[0]
+            
+##            if len(self.sourceLabel.text().split(',')) == 2:
+            if self.plotWidget.wid.cursor2 != None:
+                x2 = self.plotWidget.wid.cursor2.get_xdata()[0]
+                x2_ind = np.searchsorted(xdata, [x2])[0]
+                xstart = min(x1_ind, x2_ind)
+                xend = max(x1_ind, x2_ind)
+                xend = xend-1 if xend == len(xdata) else xend            
+##                    self.sourceLabel.setText(str(xstart) + ',' + str(xend))
+            else:
+                xstart = x1_ind-1 if x1_ind == len(xdata) else x1_ind
+                xend = None
+##                    self.sourceLabel.setText(str(xstart))
+                # self.sourceLabel = None
+            self.cursor_index = [xstart, xend]
+            print('cursors', xstart, xend)
+                
     def on_close(self, event):
         self.CLICK_STATUS = False
 
@@ -146,7 +202,7 @@ class AFMPlot:
         fig.canvas.mpl_disconnect(self.cid)
 ##        self.jpk_anal.data_zip.close() #CHECK THIS
         
-    def on_click(self, event, df_ref):
+    def on_click(self, event, df_ref, points=False):
         print('click')
         x, y = event.xdata, event.ydata
         if x != None and y != None:
@@ -155,39 +211,48 @@ class AFMPlot:
                          key=lambda l:l[0])[0][1]
             ind = sorted([[abs(a - y), a] for a in df_ref.index],
                          key=lambda l:l[0])[0][1]
-            segment_path = df_ref[col][ind]
-            print(segment_path, col, ind)
-
-            #TODO: clean and organize this up
-            mode = 'Force-distance'
-            fd_data = self.jpk_anal
-            segment_path_old = fd_data.segment_path
-##            anal_dict_old = fd_data.anal_dict.copy()
-            fd_data.clear_output(mode) #clear previous data
-            fd_data.segment_path = segment_path
-##            fd_data.anal_dict = fd_data.ANALYSIS_MODE_DICT[mode].copy()
-##            print('old')
-##            print(mode_dict_old)
-            fd_data.get_data([mode])
             
-            #fd_data = JPKAnalyze(self.file_path, mode, segment_path)
-            plot_params = fd_data.ANALYSIS_MODE_DICT[mode]['plot_parameters']
 
-            label_text = f'x={"{:.2e}".format(col)}, y={"{:.2e}".format(ind)}'
-            self.plot_line(fd_data.df[mode], plot_params, label_text=label_text)
+            if points == False:
+                segment_path = df_ref[col][ind]
+                print(segment_path, col, ind)
+                #TODO: clean and organize this up
+                mode = 'Force-distance'
+                fd_data = self.jpk_anal
+                segment_path_old = fd_data.segment_path
+    ##            anal_dict_old = fd_data.anal_dict.copy()
+                fd_data.clear_output(mode) #clear previous data
+                fd_data.segment_path = segment_path
+    ##            fd_data.anal_dict = fd_data.ANALYSIS_MODE_DICT[mode].copy()
+    ##            print('old')
+    ##            print(mode_dict_old)
+                fd_data.get_data([mode])
+                
+                #fd_data = JPKAnalyze(self.file_path, mode, segment_path)
+                plot_params = fd_data.ANALYSIS_MODE_DICT[mode]['plot_parameters']
 
-            #legend remove duplicates
-            handles, labels = self.ax_fd.get_legend_handles_labels()            
-            leg_dict = dict(zip(labels[::-1],handles[::-1]))
-            self.ax_fd.get_legend().remove()
-            leg = self.ax_fd.legend(leg_dict.values(), leg_dict.keys())
-            leg.set_draggable(True, use_blit=True)
+                label_text = f'x={"{:.2e}".format(col)}, y={"{:.2e}".format(ind)}'
+                self.plot_line(fd_data.df[mode], plot_params, label_text=label_text)
 
-            #CHECK
-            fd_data.segment_path = None
-##            fd_data.anal_dict = anal_dict_old
+                #legend remove duplicates
+                handles, labels = self.ax_fd.get_legend_handles_labels()            
+                leg_dict = dict(zip(labels[::-1],handles[::-1]))
+                self.ax_fd.get_legend().remove()
+                leg = self.ax_fd.legend(leg_dict.values(), leg_dict.keys())
+                leg.set_draggable(True, use_blit=True)
 
-            self.fig_fd.show()
+                #CHECK
+                fd_data.segment_path = None
+    ##            fd_data.anal_dict = anal_dict_old
+
+                self.fig_fd.show()
+            else:
+                z_value = df_ref[col][ind]
+                self.points_data = np.append(self.points_data,
+                                             np.array([[col,ind,z_value]]),
+                                             axis=0)
+                print(col, ind, z_value)
+            
 
     def plot_2dfit(self, fit_data, df_raw, plot_params, file_path=None):
         x = plot_params['x']
@@ -253,46 +318,149 @@ class AFMPlot:
                           autosize=True)
 
         fig.write_html(f'{file_path}/3d_jumpin_distance.html')
+        
+        #self.plotwin  = PlotlyViewer(fig)
+        
+        return fig
 
-        self.plotwin  = PlotlyViewer(fig)
-
-def simul_plot(simu_df):
+def simul_plot1(simu_df):
     sns.set_context("talk")
     sns.set_style("ticks")
-    fig = plt.figure('Simulation data')
-    
-    ax1 = fig.add_subplot(1,2,1)
+##    fig = plt.figure('Simulation data')
+##    
+##    ax1 = fig.add_subplot(1,1,1)
     mk_num = len(simu_df['Top_Angle'].unique())
-    sns.lineplot(x='Contact_Radius',y='Force_Calc',hue='Top_Angle',
-                 style='Top_Angle',data=simu_df,
-                 markers=['o']*mk_num,dashes=False,
-                 legend='full',palette='flare', ax=ax1)
+    g = sns.lmplot(x='Contact_Radius',y='Force_Calc',hue='Top_Angle',
+                 #style='Top_Angle',
+               data=simu_df,
+                 #markers=['o']*mk_num,dashes=False,
+                 legend='full',palette='flare',
+               #ax=ax1,
+               order=5, ci=None,
+                   height=8, aspect=1.3)
+    ax1 = g.ax
     ax1.axhline(y=0, color='0.8', dashes=(1, 1), zorder=0)
     
-    ax1.set_title('Adhesion force')
+    ax1.set_title('Simulation data: Adhesion force')
     ax1.set_xlabel('Drop size, R/s')
     ax1.set_ylabel(r'$F/2\pi \gamma s$')
-    leg = ax1.get_legend()
-    leg.remove()
+    leg = g.legend
+    #leg = ax1.get_legend()
+##    leg.remove()
     
-    ax2 = fig.add_subplot(1,2,2)
-    mk_num = len(simu_df['Top_Angle'].unique())
-    sns.lineplot(x='Contact_Radius',
-                 y='Average Wetted Height',hue='Top_Angle',
-                 style='Top_Angle',data=simu_df,
-                 markers=['o']*mk_num,dashes=False,
-                 legend='full',palette='flare', ax=ax2)
-
-    ax2.set_title('Wetted length')
-    ax2.set_xlabel('Drop size, R/s')
-    ax2.set_ylabel('w/s')
-    leg = ax2.get_legend()
+##    ax2 = fig.add_subplot(1,2,2)
+##    mk_num = len(simu_df['Top_Angle'].unique())
+##    sns.lineplot(x='Contact_Radius',
+##                 y='Average Wetted Height',hue='Top_Angle',
+##                 style='Top_Angle',data=simu_df,
+##                 markers=['o']*mk_num,dashes=False,
+##                 legend='full',palette='flare', ax=ax2)
+##
+##    ax2.set_title('Wetted length')
+##    ax2.set_xlabel('Drop size, R/s')
+##    ax2.set_ylabel('w/s')
+##    leg = ax2.get_legend()
     leg.set_title('Contact angle')
-    
-    plt.show(block=False)
-        
+    fig = g.fig
+    #plt.show(block=True)
 
-        
+    return fig
+
+
+def simul_plot2(simu_df):
+    sns.set_context("talk")
+    sns.set_style("ticks")
+    Rs = simu_df['Contact_Radius'].iloc[0]
+##    fig = plt.figure(f'Simulation data FD Rs={Rs}')
+##    
+##    ax1 = fig.add_subplot(1,1,1)
+    mk_num = len(simu_df['Top_Angle'].unique())
+    g = sns.lmplot(x='Height',y='Force_Calc',hue='Top_Angle',
+                 #style='Top_Angle',
+               data=simu_df,
+                 #markers=['o']*mk_num,dashes=False,
+                 legend='full',palette='flare',
+               #ax=ax1,
+               order=2, ci=None,
+                   height=8, aspect=1.3)
+    ax1 = g.ax
+    ax1.axhline(y=0, color='0.8', dashes=(1, 1), zorder=0)
+    
+    ax1.set_title(f'Simulation data (FD): R/s={Rs}')
+    ax1.set_xlabel('Height, h/s')
+    ax1.set_ylabel(r'$F/2\pi \gamma s$')
+    #leg = ax1.get_legend()
+    leg = g.legend
+##    leg.remove()
+##    
+##    ax2 = fig.add_subplot(1,2,2)
+##    mk_num = len(simu_df['Top_Angle'].unique())
+##    sns.lineplot(x='Contact_Radius',
+##                 y='Average Wetted Height',hue='Top_Angle',
+##                 style='Top_Angle',data=simu_df,
+##                 markers=['o']*mk_num,dashes=False,
+##                 legend='full',palette='flare', ax=ax2)
+##
+##    ax2.set_title('Wetted length')
+##    ax2.set_xlabel('Drop size, R/s')
+##    ax2.set_ylabel('w/s')
+##    leg = ax2.get_legend()
+    leg.set_title('Contact angle')
+    fig = g.fig
+    #plt.show(block=True)
+
+    return fig
+
+
+def simul_plot3(simu_df):
+    sns.set_context("talk")
+    sns.set_style("ticks")
+##    fig = plt.figure('Simulated contact angle')
+##    
+##    ax1 = fig.add_subplot(1,1,1)
+    mk_num = len(simu_df['Contact_Radius'].unique())
+    g = sns.lmplot(x='Rupture_Distance',y='Top_Angle',hue='Contact_Radius',
+                 #style='Contact_Radius',
+                 data=simu_df,
+                 #markers=['o']*mk_num,dashes=False,sort=False,
+                 legend='full',palette='flare',
+                 #ax=ax1,
+                 order=3, ci=None)
+    ax1 = g.ax
+    ax1.set_title('Simulation data: rupture distance')
+    ax1.set_xlabel('Rupture distance, r/s')
+    ax1.set_ylabel('Contact angle')
+    #leg = ax1.get_legend()
+    leg = g.legend
+
+    leg.set_title('Drop size, R/s')
+    fig = g.fig
+    #plt.show(block=True)
+
+    return fig
+
+
+def simul_plot(simu_df, x_var, y_var, hue_var, title, xlabel, ylabel, leglabel, fit_order=None):
+    sns.set_context("talk")
+    sns.set_style("ticks")
+
+    g = sns.lmplot(x=x_var,y=y_var,hue=hue_var,
+                   data=simu_df,
+                   legend='full',palette='flare',
+                   order=fit_order, ci=None,
+                   height=8, aspect=1.3)
+    ax1 = g.ax
+    ax1.set_title(title)
+    ax1.set_xlabel(xlabel)
+    ax1.set_ylabel(ylabel)
+
+    leg = g.legend
+    leg.set_title(leglabel)
+    fig = g.fig
+    #plt.show(block=True)
+
+    return fig
+
 ##    def plot_2dfit(self, df, plot_params, fit_output):
 ##        x = plot_params['x']
 ##        y = plot_params['y']
