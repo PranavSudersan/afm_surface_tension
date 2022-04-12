@@ -154,7 +154,8 @@ class AFMPlot:
         #self.fig_fd = plt.figure('Line plot')
         self.fig_fd = Figure(figsize=(11, 5), dpi=100)
         self.ax_fd = self.fig_fd.add_subplot(111)
-        print('before')
+        self.fd_fit_line = self.ax_fd.plot([], [], 'k:') #fd fit line object
+        #print('before')
 ##        self.fig_fd.canvas.mpl_connect('close_event',
 ##                                       lambda event: self.on_close(event))
         self.plotWidget = PlotWidget(fig = self.fig_fd,
@@ -176,13 +177,17 @@ class AFMPlot:
                                                     self.plotWidget.wid.cursor2]:
 ##            if self.sourceLabel != None:
             xdata =  self.xAxisData
+            ydata = self.yAxisData
+            #print(xdata,ydata)
             x1 = self.plotWidget.wid.cursor1.get_xdata()[0]                                
-            x1_ind = np.searchsorted(xdata, [x1])[0]
-            
+            #x1_ind = np.searchsorted(xdata, x1)
+            x1_ind = (np.abs(xdata-x1)).argmin()
+            #print(xdata,x1,x1_ind,np.searchsorted(xdata, [x1]))
 ##            if len(self.sourceLabel.text().split(',')) == 2:
             if self.plotWidget.wid.cursor2 != None:
                 x2 = self.plotWidget.wid.cursor2.get_xdata()[0]
-                x2_ind = np.searchsorted(xdata, [x2])[0]
+                #x2_ind = np.searchsorted(xdata, [x2])[0]
+                x2_ind = (np.abs(xdata-x2)).argmin()
                 xstart = min(x1_ind, x2_ind)
                 xend = max(x1_ind, x2_ind)
                 xend = xend-1 if xend == len(xdata) else xend            
@@ -193,8 +198,21 @@ class AFMPlot:
 ##                    self.sourceLabel.setText(str(xstart))
                 # self.sourceLabel = None
             self.cursor_index = [xstart, xend]
-            print('cursors', xstart, xend)
-                
+            #print('cursors', xstart, xend)
+            #print(x1,x1_ind,x2,x2_ind)
+            #fitting
+            fit_slice = slice(xstart,xend)
+            #print("Fit slice", fit_slice)
+            retract_fit = np.polyfit(xdata[fit_slice],
+                                     ydata[fit_slice],self.fd_fit_order) #CHECK FIT ORDER
+            fit_poly = np.poly1d(retract_fit)
+            self.ax_fd.autoscale(enable=False)
+            self.fd_fit_line[0].set_xdata(xdata)
+            self.fd_fit_line[0].set_ydata(fit_poly(xdata))
+            #print('polyfit x intercept',min(np.roots(retract_fit))-min(xdata))
+            #print('cursor range', abs(xdata[xstart]-xdata[xend]))
+
+    
     def on_close(self, event):
         self.CLICK_STATUS = False
 
@@ -203,7 +221,7 @@ class AFMPlot:
 ##        self.jpk_anal.data_zip.close() #CHECK THIS
         
     def on_click(self, event, df_ref, points=False):
-        print('click')
+        #print('click')
         x, y = event.xdata, event.ydata
         if x != None and y != None:
             #get segment path corresponding to clicked position
@@ -251,7 +269,7 @@ class AFMPlot:
                 self.points_data = np.append(self.points_data,
                                              np.array([[col,ind,z_value]]),
                                              axis=0)
-                print(col, ind, z_value)
+                #print(col, ind, z_value)
             
 
     def plot_2dfit(self, fit_data, df_raw, plot_params, file_path=None):
@@ -456,6 +474,9 @@ def simul_plot(simu_df, x_var, y_var, hue_var, title, xlabel, ylabel, leglabel, 
 
     leg = g.legend
     leg.set_title(leglabel)
+    for t in leg.texts:
+    # truncate label text to 4 characters
+        t.set_text(t.get_text()[:4])
     fig = g.fig
     #plt.show(block=True)
 

@@ -91,7 +91,6 @@ if(strcmp(extension,valid_extensions{1,1}))
         file_info=imfinfo(complete_path_to_afm_file);
     end
     number_of_images=numel(file_info);
-    
     wb=waitbar(0/number_of_images,sprintf('Loading Channel %.0f of %.0f',0,number_of_images),...
         'CreateCancelBtn','setappdata(gcbf,''canceling'',1)');
     setappdata(wb,'canceling',0);
@@ -246,8 +245,7 @@ if(strcmp(extension,valid_extensions{1,1}))
                     'Vertical_kn', Vertical_kn,...
                     'Alpha', Alpha);
                 
-            elseif(strcmp(Type,'ac'))
-                
+            elseif(strcmp(Type,'ac') || strcmp(Type,'ac-direct-drive'))
                 if(~isempty(find([file_info(i).UnknownTags.ID]==32818)))
                     I_Gain=abs((file_info(i).UnknownTags(find([file_info(i).UnknownTags.ID]==32818)).Value));
                 else
@@ -319,7 +317,8 @@ if(strcmp(extension,valid_extensions{1,1}))
                     'Vertical_kn', Vertical_kn);
                 
             else
-                error('Code not valid for type of AFM imaging...')
+                error('Code not valid for type of AFM imaging...');
+                
             end
             
             
@@ -377,17 +376,16 @@ if(strcmp(extension,valid_extensions{1,1}))
                 offset=0;
             end
             
-            
-            
-            if(~strcmp(Channel_Name,'Vertical Deflection'))
-                afm_image=((double(imread(complete_path_to_afm_file,i))*multiplyer))+offset;
-            else
-                if(strcmp(Bline_adjust,'No'))
+            if(strcmp(Channel_Name,'Vertical Deflection') && strcmp(Type,'contact'))
+                if(strcmp(Bline_adjust,'No'))%Bline_adjust
                     afm_image=((double(imread(complete_path_to_afm_file,i))*multiplyer))+offset;
                 else
                     Details_Img.Baseline_N=(Baseline_Raw*multiplyer)+offset;
                     afm_image=((double(imread(complete_path_to_afm_file,i))*multiplyer))+offset;
                 end
+            else
+                afm_image=((double(imread(complete_path_to_afm_file,i))*multiplyer))+offset;
+                
             end
             
             Image(i-1)=struct(...
@@ -568,6 +566,7 @@ for j=1:channel_num(1)
 end
 varargout2.header = varargout{2};
 varargout2.filepath = varargout{3};
+%varargout2.fileinfo = file_info;
 
 % varargout2 = struct(strcat(varargout{1}(1).Channel_name," - ",varargout{1}(1).Trace_type),varargout{1}(3),...
 %     'header',varargout{2},...

@@ -21,6 +21,7 @@ class JPKAnalyze(JPKRead):
     def __init__(self, file_path, segment_path):
         #Make sure variable keys in result dict of 'function' definition
         #is same as 'output' keys of below
+        #TODO: simplify dictionary to automatically include all possible channel pre-existing in afm file
         self.ANALYSIS_MODE_DICT = {'Adhesion': {'function': self.get_adhesion,
                                                 'output': {'Adhesion': [],'X': [], 'Y':[],
                                                            'Segment folder': []},
@@ -51,7 +52,9 @@ class JPKAnalyze(JPKRead):
                                                                             'z': 'Height',
                                                                             'title': 'Height (measured)',
                                                                             'type': ['2d'],
-                                                                            'points_flag':True}
+                                                                            'points_flag':True},
+                                                         'misc': {'trace': 'average',#trace, retrace, average
+                                                                  'calibration': 'nominal'}#nominal,degrees
                                                         },
                                    'Force-distance': {'function': self.get_force_distance,
                                                       'output': {'Force': [],
@@ -76,6 +79,56 @@ class JPKAnalyze(JPKRead):
     def clear_output(self, mode):
         for key in self.ANALYSIS_MODE_DICT[mode]['output'].keys():
             self.ANALYSIS_MODE_DICT[mode]['output'][key] = []
+    
+    #get channel data from .jpk file
+    def get_height_measured(self, channel, trace, calibration):
+
+        jpk_data_dict = self.jpk_data_dict
+        if trace == 'average':
+            z_data = np.mean([jpk_data_dict[channel]['trace'][calibration]['data'],
+                             jpk_data_dict[channel]['retrace'][calibration]['data']], axis=0)
+        else:
+            z_data = jpk_data_dict[channel][trace]['nominal']['data']
+        #print(matlab_output['header'], matlab_output.keys())
+        x0 = jpk_data_dict['header']['Grid-x0']
+        y0 = jpk_data_dict['header']['Grid-y0']
+        x_len = jpk_data_dict['header']['Grid-uLength']
+        y_len = jpk_data_dict['header']['Grid-vLength']
+        x_num = int(jpk_data_dict['header']['Grid-iLength'])
+        y_num = int(jpk_data_dict['header']['Grid-jLength'])
+        scan_angle = jpk_data_dict['header']['Grid-Theta']
+        x_data = np.linspace(x0, x0+x_len, num=x_num)
+        y_data = np.linspace(y0, y0+y_len, num=y_num)
+        xx_data, yy_data = np.meshgrid(x_data, y_data)
+#         mode = modes[0] #CHECK
+        self.rotation_info = [x0, y0, scan_angle]
+#         start = time.process_time()
+#         print(x_num,y_num)
+        
+        #USE SAME KEYS AS ANALYSIS_MODE_DICT!
+        result_dict = {'Height': np.array(z_data).flatten(),
+                       'X': xx_data.flatten(), 
+                       'Y':yy_data.flatten(),
+                       'Segment folder': [None]*(x_num*y_num)} 
+#         output = self.anal_dict[mode]['output']
+        
+#         output['Height'] = np.array(z_data).flatten()
+#         output['X'] = xx_data.flatten()
+#         output['Y'] = yy_data.flatten()
+#         output['Segment folder']= [None]*(x_num*y_num)
+        
+#         for i in range(x_num-1):
+#             for j in range(y_num-1):
+#                 #x_rotated = x0 + (x_data[i]-x0)*np.cos(scan_angle) + (y_data[j]-y0)*np.sin(scan_angle)
+#                 #y_rotated = y0 -(x_data[i]-x0)*np.sin(scan_angle) + (y_data[j]-y0)*np.cos(scan_angle)
+#                 output = self.anal_dict[mode]['output']
+#                 output['Height'] = np.append(output['Height'], z_data[j][i])
+#                 output['X'] = np.append(output['X'], x_data[i])
+#                 output['Y'] = np.append(output['Y'], y_data[j])
+#                 output['Segment folder'].append(None) #CHECK
+#         print(time.process_time() - start)
+#         self.df[mode] = pd.DataFrame(self.anal_dict[mode]['output'])
+        return result_dict
     
     def get_adhesion(self, dirpath, *args, **kwargs):    
         retract_dir = f'{dirpath}1'  #retract folder  
@@ -161,13 +214,13 @@ class JPKAnalyze(JPKRead):
             segment_header_dict = self.parse_header_file(segment_header)
             #get segment force data
             force_data = self.decode_data('vDeflection', segment_header_dict,
-                                          segment_dir)['force']
+                                          segment_dir)['force']#*1.8791985756808538/1.0813298069873634
             #get piezo measured height data
             height_data = self.decode_data('measuredHeight', segment_header_dict,
                                            segment_dir)['nominal']
             #get cantilever deflection
             defl_data = self.decode_data('vDeflection', segment_header_dict,
-                                         segment_dir)['distance']
+                                         segment_dir)['distance']#*3.361455619561316E-8/4.660000000000001E-8
             #tip sample distance
             distance_data = height_data + (defl_data)#-defl_data[0]
 
@@ -333,13 +386,13 @@ class DataAnalyze:
             # best-fit linear plane
             A = np.c_[points[:,0], points[:,1], np.ones(points.shape[0])]
             C,_,_,_ = np.linalg.lstsq(A, points[:,2], rcond=None)    # coefficients
-            print(C)
+            #print(C)
             # evaluate it on grid
 ##            Z = C[0]*X + C[1]*Y + C[2]
 ##            print(Z)
             self.df['Zero fit'] = C[0]*self.df[self.plot_x] + \
                                   C[1]*self.df[self.plot_y] + C[2]
-            print(self.df)
+            #print(self.df)
         elif order == 2:
             x, y, z = points.T
             #x, y = x - x[0], y - y[0]  # this improves accuracy
@@ -348,7 +401,7 @@ class DataAnalyze:
             G = self.poly_matrix(x, y, order)
             # Solve for np.dot(G, m) = z:
             m = np.linalg.lstsq(G, z, rcond=None)[0]
-            print('m', m)
+            #print('m', m)
             # Evaluate it on a grid...
 ##            GG = self.poly_matrix(X.ravel(), Y.ravel(), order)
 ##            Z = np.reshape(np.dot(GG, m), X.shape)
