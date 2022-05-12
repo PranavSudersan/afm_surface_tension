@@ -10,7 +10,7 @@ import seaborn as sns
 import plotly.graph_objects as go
 
 from afm_analyze import JPKAnalyze
-from plotly_viewer import PlotlyViewer
+#from plotly_viewer import PlotlyViewer
 from plot2widget import PlotWidget
 
 class AFMPlot:
@@ -108,7 +108,7 @@ class AFMPlot:
                                        yaxis_title=y,
                                        zaxis_title=z),
                           autosize=True)
-        self.plotwin  = PlotlyViewer(fig)
+        #self.plotwin  = PlotlyViewer(fig)
 
         
 ##    def plot_3d(self, df, plot_params):

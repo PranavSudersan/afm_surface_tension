@@ -1,7 +1,7 @@
 __pycache__/
 .ipynb_checkpoints/
 data/
-.ipynb_checkpoints/
+venv/
 *.html
 *.asv
 test.py
