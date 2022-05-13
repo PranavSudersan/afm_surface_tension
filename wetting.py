@@ -8,11 +8,8 @@ import pandas as pd
 import numpy as np
 from scipy import integrate
 
-#drop volume/contact radius/contact angle
-def get_drop_prop(file_path, output_dir, fd_file_paths = None, 
-                  force_cycle='approach', level_order=1):
-      
-    
+
+def get_afm_image(file_path, output_dir, level_order=1):
     #import data
     jpk_data = JPKAnalyze(file_path, None)
     
@@ -39,24 +36,84 @@ def get_drop_prop(file_path, output_dir, fd_file_paths = None,
 #     output_dir = f'{file_dir}/{file_name}'
 #     os.makedirs(output_dir, exist_ok=True)
     
-    fig_list = []
+    
     #plot data
     afm_plot = AFMPlot(jpk_data, output_path=output_dir)
     points_data = afm_plot.points_data #collect points to fit plane
 
-    #analyze height data    
+    #correct height data  
     anal_data_h = DataAnalyze(jpk_data, volume_mode)
     if len(points_data)!=0:#tilt correction
         anal_data_h.level_data(points_data, order=level_order)
         jpk_data.df[volume_mode] = anal_data_h.df.copy()
-        jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['z'] += ' corrected'
-        jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['title'] += ' corrected'
-        afm_plot.__init__(jpk_data, output_path=output_dir)
-        zero_height = 0
+        #jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['z'] += ' corrected'
+        #jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['title'] += ' corrected'
+        #afm_plot.__init__(jpk_data, output_path=output_dir)
+        #zero_height = 0
     else:   
         clusters_h = anal_data_h.get_kmeans(2)
         zero_height = clusters_h.min()
+        z_param = jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['z']
+        jpk_data.df[volume_mode][z_param + ' corrected'] = jpk_data.df[volume_mode][z_param]-zero_height
+    jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['z'] += ' corrected'
+    jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['title'] += ' corrected'
+    afm_plot.__init__(jpk_data, output_path=output_dir)
+    
+    fig_list = jpk_data.ANALYSIS_MODE_DICT['Misc']['figure_list']
+    
+    return jpk_data, anal_data_h, fig_list
+    
+        
+#drop volume/contact radius/contact angle
+def get_drop_prop(jpk_data, anal_data_h, output_dir, fd_file_paths = None, 
+                  force_cycle='approach', level_order=1):
+      
+    
+    #import data
+    # jpk_data = JPKAnalyze(file_path, None)
+    
+    if jpk_data.file_format == 'jpk':
+        segment_mode = 'Height (measured)'
+        volume_mode = 'Height (measured)'
+        rotation_info = jpk_data.rotation_info
+    elif jpk_data.file_format == 'jpk-qi-data':
+        segment_mode = 'Snap-in distance' #Adhesion
+        volume_mode = 'Snap-in distance'
+        rotation_info = None #CHECK for QI!
 
+##    volume = anal_data.get_volume(zero=zero_height)
+##    max_height = anal_data.get_max_height(zero_height)
+
+    ##print('Volume:', volume)
+    ##print('Max height:', max_height)
+    ##print('Zero height:', zero_height)
+
+#     #make output directory
+#     if file_dir == '':
+#         file_dir = os.path.dirname(file_path) + '/analysis'
+#     file_name = os.path.basename(file_path)
+#     output_dir = f'{file_dir}/{file_name}'
+#     os.makedirs(output_dir, exist_ok=True)
+    
+    fig_list = []
+    #plot data
+#     afm_plot = AFMPlot(jpk_data, output_path=output_dir)
+#     points_data = afm_plot.points_data #collect points to fit plane
+
+#     #analyze height data    
+#     anal_data_h = DataAnalyze(jpk_data, volume_mode)
+#     if len(points_data)!=0:#tilt correction
+#         anal_data_h.level_data(points_data, order=level_order)
+#         jpk_data.df[volume_mode] = anal_data_h.df.copy()
+#         jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['z'] += ' corrected'
+#         jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['title'] += ' corrected'
+#         afm_plot.__init__(jpk_data, output_path=output_dir)
+#         zero_height = 0
+#     else:   
+#         clusters_h = anal_data_h.get_kmeans(2)
+#         zero_height = clusters_h.min()
+    zero_height = 0
+    
     #analyze adhesion data for segmentation (get fg/bg)
     anal_data_adh = DataAnalyze(jpk_data, segment_mode)
     clusters_adh = anal_data_adh.get_kmeans(2)
@@ -72,7 +129,7 @@ def get_drop_prop(file_path, output_dir, fd_file_paths = None,
     
     ###fit data
     data_fit = DataFit(jpk_data, volume_mode,
-                       afm_plot, 'Sphere-RC', img_anal,
+                       'Sphere-RC', img_anal,
                        zero = zero_height,
                        output_path=output_dir)#,"Height>=0.5e-7",
                        #guess=[1.5e-5,-1e-5],bounds=([1e-6,-np.inf],[1e-4,np.inf]),
@@ -99,7 +156,7 @@ def get_drop_prop(file_path, output_dir, fd_file_paths = None,
         output_dict['FD X position'] = []
         output_dict['FD Y position'] = []
         output_dict['FD file'] = []
-                
+    anal_data_h = DataAnalyze(jpk_data, volume_mode)            
     for key in data_fit.fit_output.keys():
         curvature = data_fit.fit_output[key]['R']
 ##        contact_radius = anal_data.get_contact_radius(data_fit.fit_output[key],
@@ -154,7 +211,7 @@ def get_drop_prop(file_path, output_dir, fd_file_paths = None,
     output_df = pd.DataFrame(output_dict)
     output_df['s'] = ((3*output_df['Volume'])/(4*np.pi))**(1/3)
     output_df['R/d'] = output_df['Contact Radius']/output_df['Max Height']
-    output_df['AFM file'] = file_path
+    #output_df['AFM file'] = file_path
     #file_name = file_path.split('/')[-1][:-len(jpk_data.file_format)-1]
 
     return output_df, fig_list

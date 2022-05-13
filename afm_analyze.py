@@ -12,6 +12,7 @@ import statistics
 from matplotlib.widgets import Slider
 
 from afm_read import JPKRead
+from afm_plot import AFMPlot
 
 class JPKAnalyze(JPKRead):
 
@@ -69,7 +70,8 @@ class JPKAnalyze(JPKRead):
                                                                           'title': 'Force-distance curve',
                                                                           'type': ['line'],
                                                                           'points_flag':False}
-                                                      }
+                                                      },
+                                   'Misc': {'figure_list': []}
                                    }
         #initialize JPKRead and get data
         super().__init__(file_path, self.ANALYSIS_MODE_DICT,
@@ -250,7 +252,7 @@ class JPKAnalyze(JPKRead):
     
 
 class DataFit:
-    def __init__(self, jpk_anal, mode, afm_plot, func, img_anal,
+    def __init__(self, jpk_anal, mode, func, img_anal,
                  guess=None, bounds=(-np.inf, np.inf), zero=0,
                  output_path=None):
         FIT_DICT = {'Sphere-RC': {'function': self.sphere_rc,
@@ -344,6 +346,7 @@ class DataFit:
         z_zero = 0*x_zero + zero
         self.fit_data_full['zero'] = {x: x_zero, y: y_zero, z: z_zero}
         #plot
+        afm_plot = AFMPlot()
         self.fig = afm_plot.plot_2dfit(self.fit_data_full, df_data, plot_params,
                                        file_path=output_path)
 

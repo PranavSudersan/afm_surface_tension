@@ -9,7 +9,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import seaborn as sns
 import plotly.graph_objects as go
 
-from afm_analyze import JPKAnalyze
+#from afm_analyze import JPKAnalyze
 #from plotly_viewer import PlotlyViewer
 from plot2widget import PlotWidget
 
@@ -31,9 +31,11 @@ class AFMPlot:
             for mode in jpk_anal.df.keys():
                 plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']
                 for plot_type in plot_params['type']:
-                    PLOT_DICT[plot_type](jpk_anal.df[mode], plot_params,
+                    fig = PLOT_DICT[plot_type](jpk_anal.df[mode], plot_params,
                                          file_path=output_path,
-                                         points=plot_params['points_flag'])
+                                         points=plot_params['points_flag'],
+                                        return_fig=True)
+                    jpk_anal.anal_dict['Misc']['figure_list'].append(fig)
 
             #plt.show(block=False)
 ##        plt.pause(0.05)
@@ -41,7 +43,7 @@ class AFMPlot:
 ####            self.plotwin.show()
 ##            self.plotwin.app.exec_()
     
-    def plot_2d(self, df, plot_params, file_path=None, points=False):
+    def plot_2d(self, df, plot_params, file_path=None, points=False,return_fig=False):
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
@@ -87,9 +89,12 @@ class AFMPlot:
         fig2d.canvas.mpl_connect('close_event',
                                  lambda event: self.on_figclose(event, fig2d))
         plt.show(block=points)
+        
+        if return_fig == True:
+            return fig2d
 
 
-    def plot_3d(self, df, plot_params, file_path=None, points=False):
+    def plot_3d(self, df, plot_params, file_path=None, points=False, return_fig=False):
         x = plot_params['x']
         y = plot_params['y']
         z = plot_params['z']
@@ -108,6 +113,9 @@ class AFMPlot:
                                        yaxis_title=y,
                                        zaxis_title=z),
                           autosize=True)
+        
+        if return_fig == True:
+            return fig
         #self.plotwin  = PlotlyViewer(fig)
 
         
@@ -127,7 +135,7 @@ class AFMPlot:
 ##        ##fig3d.colorbar(surf, shrink=0.5, aspect=5)
 
     def plot_line(self, df, plot_params, label_text=None, file_path=None, points=False,
-                  color=None):
+                  color=None, return_fig=False):
         x = plot_params['x']
         y = plot_params['y']
         style = plot_params['style']
@@ -144,7 +152,11 @@ class AFMPlot:
         self.ax_fd.ticklabel_format(style='sci', scilimits=(0,0))
         self.ax_fd.set_xlabel(x)
         self.ax_fd.set_ylabel(y)
-        self.fig_fd.suptitle(plot_params['title'])
+        self.fig_fd.suptitle(plot_params['title'])        
+        
+        if return_fig == True:
+            return self.fig_fd
+        
         #plt.show(block=False)
 ##        df.to_excel('test-fd-data.xlsx')
 
