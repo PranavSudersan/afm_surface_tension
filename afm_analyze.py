@@ -19,7 +19,7 @@ class JPKAnalyze(JPKRead):
     #mapping of keys in header files which depend on file format
     FORMAT_KEY_DICT = {'jpk-qi-data': {'position': 'position'},
                        'jpk-force': {'position': 'start-position'}}
-    def __init__(self, file_path, segment_path):
+    def __init__(self, file_path, segment_path, jump_tol=0.8):
         #Make sure variable keys in result dict of 'function' definition
         #is same as 'output' keys of below
         #TODO: simplify dictionary to automatically include all possible channel pre-existing in afm file
@@ -75,7 +75,7 @@ class JPKAnalyze(JPKRead):
                                    }
         #initialize JPKRead and get data
         super().__init__(file_path, self.ANALYSIS_MODE_DICT,
-                         segment_path)
+                         segment_path, jump_tol=jump_tol)
 
     #clear output data in ANALYSIS_MODE_DICT
     def clear_output(self, mode):
@@ -152,7 +152,7 @@ class JPKAnalyze(JPKRead):
                        'Segment folder': dirpath} 
         return result_dict
 
-    def get_snapin_distance(self, dirpath, *args, **kwargs):    
+    def get_snapin_distance(self, dirpath, jump_tol=0.8, *args, **kwargs):    
         extend_dir = f'{dirpath}0'  #extend folder
         #get segment header file
         segment_header_path = f'{extend_dir}/segment-header.properties'
@@ -188,8 +188,8 @@ class JPKAnalyze(JPKRead):
         snapin_distance = height_data[idx_min] - height_data[-1]
         #TODO: define as fraction of extend distance range
         total_distance = height_data[0] - height_data[-1]
-        tolerence = 0.8
-        snapin_distance = 0 if snapin_distance >= tolerence * total_distance \
+        #tolerence = 0.8
+        snapin_distance = 0 if snapin_distance >= jump_tol * total_distance \
                           else snapin_distance
 
         #get position

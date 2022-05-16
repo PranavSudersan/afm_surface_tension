@@ -9,9 +9,9 @@ import numpy as np
 from scipy import integrate
 
 
-def get_afm_image(file_path, output_dir, level_order=1):
+def get_afm_image(file_path, output_dir, level_order=1, jump_tol=0.8):
     #import data
-    jpk_data = JPKAnalyze(file_path, None)
+    jpk_data = JPKAnalyze(file_path, None, jump_tol=jump_tol)
     
     if jpk_data.file_format == 'jpk':
         segment_mode = 'Height (measured)'

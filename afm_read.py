@@ -11,7 +11,7 @@ class JPKRead:
                   'integer-data':(4,'i'), 'signedinteger':(4,'i'),
                   'float-data':(4,'f')}
     #anal_dict: ANALYSIS_MODE_DICT[mode] dictionary reference
-    def __init__(self, file_path, anal_dict, segment_path):
+    def __init__(self, file_path, anal_dict, segment_path, jump_tol=0.8):
         self.file_path = file_path
         self.anal_dict = anal_dict
         self.segment_path = segment_path
@@ -37,7 +37,7 @@ class JPKRead:
 #             self.get_height_measured(file_path, modes)
         else:
             self.data_zip = zipfile.ZipFile(self.file_path, 'r')
-            self.get_data(modes)
+            self.get_data(modes, jump_tol=jump_tol)
 
         
     #read jpk TIFF file and return data matrixes (check JPK TIFF specification for hex code details)
@@ -121,7 +121,7 @@ class JPKRead:
 
                 
     #import datafile and get output dataframe
-    def get_data(self, modes):
+    def get_data(self, modes, jump_tol, *args, **kwargs):
         #print(self.segment_path)
 ##        self.file_format = self.file_path.split('.')[-1]
 ##        self.data_zip = zipfile.ZipFile(self.file_path, 'r')
@@ -134,7 +134,7 @@ class JPKRead:
             for file in file_list:
                 if file.endswith('segments/'): # segments folder
                     for mode in modes:
-                        result = self.anal_dict[mode]['function'](dirpath=file)
+                        result = self.anal_dict[mode]['function'](dirpath=file, jump_tol=jump_tol)
                         for key, value in result.items():
                             output = self.anal_dict[mode]['output']
                             output[key] = np.append(output[key], value)
