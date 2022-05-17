@@ -221,6 +221,11 @@ class AFMPlot:
             self.ax_fd.autoscale(enable=False)
             self.fd_fit_line[0].set_xdata(xdata)
             self.fd_fit_line[0].set_ydata(fit_poly(xdata))
+            
+#             x0 = min(xdata)
+#             dydx = 2*retract_fit[0]*x0 + retract_fit[1]
+#             y0 = fit_poly(x0)
+#             print(y0-ydata[0], dydx, (abs(y0-ydata[0])/dydx))
             #print('polyfit x intercept',min(np.roots(retract_fit))-min(xdata))
             #print('cursor range', abs(xdata[xstart]-xdata[xend]))
 

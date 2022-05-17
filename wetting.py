@@ -65,21 +65,25 @@ def get_afm_image(file_path, output_dir, level_order=1, jump_tol=0.8):
     
         
 #drop volume/contact radius/contact angle
-def get_drop_prop(jpk_data, anal_data_h, output_dir, fd_file_paths = None, 
-                  force_cycle='approach', level_order=1):
-      
-    
+def get_drop_prop(jpk_data, anal_data_h, output_dir, level_order=1):          
     #import data
     # jpk_data = JPKAnalyze(file_path, None)
+    
+    #output data params
+    output_dict = {'Label': [], 'Curvature':[], 'Contact Radius': [],
+                   'Max Height': [], 'Max Height raw': [],
+                   'Volume': [], 'Volume raw':[],
+                   'Drop contact angle': []}
     
     if jpk_data.file_format == 'jpk':
         segment_mode = 'Height (measured)'
         volume_mode = 'Height (measured)'
-        rotation_info = jpk_data.rotation_info
+        #rotation_info = jpk_data.rotation_info
     elif jpk_data.file_format == 'jpk-qi-data':
         segment_mode = 'Snap-in distance' #Adhesion
         volume_mode = 'Snap-in distance'
-        rotation_info = None #CHECK for QI!
+        #rotation_info = None #CHECK for QI!
+        output_dict['Max Adhesion'] = []
 
 ##    volume = anal_data.get_volume(zero=zero_height)
 ##    max_height = anal_data.get_max_height(zero_height)
@@ -135,28 +139,24 @@ def get_drop_prop(jpk_data, anal_data_h, output_dir, fd_file_paths = None,
                        #guess=[1.5e-5,-1e-5],bounds=([1e-6,-np.inf],[1e-4,np.inf]),
     fig_list.append(data_fit.fig)
 
-    #output params
-    output_dict = {'Label': [], 'Curvature':[], 'Contact Radius': [],
-                   'Max Height': [], 'Max Height raw': [],
-                   'Volume': [], 'Volume raw':[],
-                   'Drop contact angle': [], 'Max Adhesion': []}
+    
     #print('label','h','h_raw','V','V_raw')
 
-    if len(fd_file_paths) != 0:                   
-        fd_adhesion_dict = get_adhesion_from_fd(fd_file_paths, jpk_data,
-                                                img_anal, segment_mode,
-                                                force_cycle = force_cycle,
-                                                rotation_info = rotation_info,
-                                                output_path = output_dir)
-        output_dict['Adhesion (FD)'] = []
-        output_dict['Slope (FD)'] = []
-        output_dict['Wetted length (FD)'] = []
-        output_dict['Rupture distance (FD)'] = []
-        output_dict['Adhesion energy (FD)'] = []
-        output_dict['FD X position'] = []
-        output_dict['FD Y position'] = []
-        output_dict['FD file'] = []
-    anal_data_h = DataAnalyze(jpk_data, volume_mode)            
+#     if len(fd_file_paths) != 0:                   
+#         fd_adhesion_dict = get_adhesion_from_fd(fd_file_paths, jpk_data,
+#                                                 img_anal, segment_mode,
+#                                                 force_cycle = force_cycle,
+#                                                 rotation_info = rotation_info,
+#                                                 output_path = output_dir)
+#         output_dict['Adhesion (FD)'] = []
+#         output_dict['Slope (FD)'] = []
+#         output_dict['Wetted length (FD)'] = []
+#         output_dict['Rupture distance (FD)'] = []
+#         output_dict['Adhesion energy (FD)'] = []
+#         output_dict['FD X position'] = []
+#         output_dict['FD Y position'] = []
+#         output_dict['FD file'] = []
+    #anal_data_h = DataAnalyze(jpk_data, volume_mode)            
     for key in data_fit.fit_output.keys():
         curvature = data_fit.fit_output[key]['R']
 ##        contact_radius = anal_data.get_contact_radius(data_fit.fit_output[key],
@@ -168,6 +168,7 @@ def get_drop_prop(jpk_data, anal_data_h, output_dir, fd_file_paths = None,
         if jpk_data.file_format == 'jpk-qi-data':
             f_max = anal_data_h.get_max_adhesion(jpk_data, 'Adhesion',
                                                img_anal.coords[key])
+            output_dict['Max Adhesion'].append(f_max)
         else:
             f_max = None
 
@@ -185,28 +186,28 @@ def get_drop_prop(jpk_data, anal_data_h, output_dir, fd_file_paths = None,
         output_dict['Volume'].append(V)
         output_dict['Volume raw'].append(V_raw)
         output_dict['Drop contact angle'].append(a)
-        output_dict['Max Adhesion'].append(f_max)
+        
 
-        if len(fd_file_paths) != 0:
-            if key in fd_adhesion_dict.keys():
-                val = fd_adhesion_dict[key]
-                output_dict['Adhesion (FD)'].append(val[0])
-                output_dict['Slope (FD)'].append(val[6])
-                output_dict['Wetted length (FD)'].append(val[7])
-                output_dict['Rupture distance (FD)'].append(val[8])
-                output_dict['Adhesion energy (FD)'].append(val[9])
-                output_dict['FD X position'].append(val[1])
-                output_dict['FD Y position'].append(val[2])
-                output_dict['FD file'].append(val[5])
-            else:
-                output_dict['Adhesion (FD)'].append(0)
-                output_dict['Slope (FD)'].append(0)
-                output_dict['Wetted length (FD)'].append(0)
-                output_dict['Rupture distance (FD)'].append(0)
-                output_dict['Adhesion energy (FD)'].append(0)
-                output_dict['FD X position'].append(0)
-                output_dict['FD Y position'].append(0)
-                output_dict['FD file'].append('')
+#         if len(fd_file_paths) != 0:
+#             if key in fd_adhesion_dict.keys():
+#                 val = fd_adhesion_dict[key]
+#                 output_dict['Adhesion (FD)'].append(val[0])
+#                 output_dict['Slope (FD)'].append(val[6])
+#                 output_dict['Wetted length (FD)'].append(val[7])
+#                 output_dict['Rupture distance (FD)'].append(val[8])
+#                 output_dict['Adhesion energy (FD)'].append(val[9])
+#                 output_dict['FD X position'].append(val[1])
+#                 output_dict['FD Y position'].append(val[2])
+#                 output_dict['FD file'].append(val[5])
+#             else:
+#                 output_dict['Adhesion (FD)'].append(0)
+#                 output_dict['Slope (FD)'].append(0)
+#                 output_dict['Wetted length (FD)'].append(0)
+#                 output_dict['Rupture distance (FD)'].append(0)
+#                 output_dict['Adhesion energy (FD)'].append(0)
+#                 output_dict['FD X position'].append(0)
+#                 output_dict['FD Y position'].append(0)
+#                 output_dict['FD file'].append('')
 
     output_df = pd.DataFrame(output_dict)
     output_df['s'] = ((3*output_df['Volume'])/(4*np.pi))**(1/3)
@@ -214,17 +215,36 @@ def get_drop_prop(jpk_data, anal_data_h, output_dir, fd_file_paths = None,
     #output_df['AFM file'] = file_path
     #file_name = file_path.split('/')[-1][:-len(jpk_data.file_format)-1]
 
-    return output_df, fig_list
+    return output_df, img_anal, fig_list
 ##    print('s:', output_df['s'], 'R/s', output_df['R/s'])
 
-
+                
 #get adhesion and slope from force data files
-def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
-                         force_cycle='approach', rotation_info=None, output_path=None):
+def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
+                    force_cycle='approach', fit_order=1, output_path=None):
+    
+    if jpk_map.file_format == 'jpk':
+        segment_mode = 'Height (measured)'
+        #volume_mode = 'Height (measured)'
+        rotation_info = jpk_map.rotation_info
+    elif jpk_map.file_format == 'jpk-qi-data':
+        segment_mode = 'Snap-in distance' #Adhesion
+        #volume_mode = 'Snap-in distance'
+        rotation_info = None #CHECK for QI!
+        
     df_adh = jpk_map.df[segment_mode]
     x_array = df_adh['X']
     y_array = df_adh['Y']
-    data_dict = {}
+    data_dict = {'Label': [],
+                'Adhesion (FD)': [],
+                'Slope (FD)': [],
+                'Wetted length (FD)': [],
+                'Rupture distance (FD)': [],
+                'Adhesion energy (FD)': [],
+                'FD X position': [],
+                'FD Y position': [],
+                'FD file' : []
+                }
     afm_plot = AFMPlot()
     #colors
     evenly_spaced_interval = np.linspace(0, 1, len(fd_file_paths))
@@ -294,7 +314,7 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
             #retraction data to afm_plot for cursor based updating (eg. positions, fitting)
             afm_plot.xAxisData = distance_data_dict[force_cycle]#d_retract.to_numpy()
             afm_plot.yAxisData = force_data_dict[force_cycle]#force_data[int(num_points/2):]
-            afm_plot.fd_fit_order = 1 #CHECK FIT ORDER
+            afm_plot.fd_fit_order = fit_order #CHECK FIT ORDER
         
             afm_plot.plotWidget.wid.updateCursor(afm_plot.plotWidget.wid.cursor1,
                                                  afm_plot.xAxisData.min())
@@ -364,12 +384,24 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
                                     transparent = False)
             afm_plot.CLICK_STATUS = False #done to reinitialize fd plot
 
-            data_dict[label] = [adhesion, x_rot, y_rot, x_real, y_real,
-                                file_path, retract_fit[0], wetted_length,
-                                rupture_distance, energy_adhesion]
+#             data_dict[label] = [adhesion, x_rot, y_rot, x_real, y_real,
+#                                 file_path, retract_fit[0], wetted_length,
+#                                 rupture_distance, energy_adhesion]
+            data_dict['Label'].append(label)
+            data_dict['Adhesion (FD)'].append(adhesion)
+            data_dict['Slope (FD)'].append(retract_fit[0])
+            data_dict['Wetted length (FD)'].append(wetted_length)
+            data_dict['Rupture distance (FD)'].append(rupture_distance)
+            data_dict['Adhesion energy (FD)'].append(energy_adhesion)
+            data_dict['FD X position'].append(x_rot)
+            data_dict['FD Y position'].append(y_rot)
+            data_dict['FD file'].append(file_path)
+            
         except Exception as e:
             print(e)
-            pass
+            continue
+    
+    output_df = pd.DataFrame(data_dict)
         #afm_plot.fig_fd.show()
 ##    if len(fd_file_paths) != 0:
 ##        #legend remove duplicates and sort
@@ -385,7 +417,7 @@ def get_adhesion_from_fd(fd_file_paths, jpk_map, img_anal, segment_mode,
 ##        afm_plot.ax_fd.autoscale(enable=True)
 ##        afm_plot.fig_fd.savefig(f'{output_path}/FD_curves.png', bbox_inches = 'tight',
 ##                                transparent = False)
-    return data_dict
+    return output_df
 
 
 def get_surface_tension(output_df, simu_df, contact_angle, fd_file_paths,
