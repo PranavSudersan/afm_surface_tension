@@ -4,6 +4,7 @@ from matplotlib.pyplot import cm
 from matplotlib import pyplot as plt
 import sys
 import os
+import copy
 import pandas as pd
 import numpy as np
 from scipy import integrate
@@ -231,7 +232,9 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
         segment_mode = 'Snap-in distance' #Adhesion
         #volume_mode = 'Snap-in distance'
         rotation_info = None #CHECK for QI!
-        
+    
+    fig_list = []
+    
     df_adh = jpk_map.df[segment_mode]
     x_array = df_adh['X']
     y_array = df_adh['Y']
@@ -251,6 +254,7 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
     colors = [cm.rainbow(x) for x in evenly_spaced_interval]
     for i, file_path in enumerate(fd_file_paths):
         #import data
+        print('Force file:', file_path)
         jpk_data = JPKAnalyze(file_path, None)
         df = jpk_data.df['Force-distance']
         plot_params = jpk_data.ANALYSIS_MODE_DICT['Force-distance']['plot_parameters']
@@ -379,6 +383,7 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
                                         force_data_dict[force_cycle][fit_slice],
                                         color = 'black', alpha=0.5)
             
+            fig_list.append(copy.copy(afm_plot.fig_fd))
             #plt.show(block=True)
             afm_plot.fig_fd.savefig(f'{output_path}/FD_curves_{label_text}.png', bbox_inches = 'tight',
                                     transparent = False)
@@ -417,7 +422,7 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
 ##        afm_plot.ax_fd.autoscale(enable=True)
 ##        afm_plot.fig_fd.savefig(f'{output_path}/FD_curves.png', bbox_inches = 'tight',
 ##                                transparent = False)
-    return output_df
+    return output_df, fig_list
 
 
 def get_surface_tension(output_df, simu_df, contact_angle, fd_file_paths,
@@ -703,7 +708,7 @@ def combine_simul_data(simu_folderpath, fit=False, plot=False):
     simu_df = pd.DataFrame()
     simu_df_anal = pd.DataFrame()
     fd_fit_dict = {}
-    fd_fit_order = 1 #(CHECK ORDER!)
+    fd_fit_order = 2 #(CHECK ORDER!)
     force_var = 'Force_fit' #Force_Calc,Force_Eng,Force_fit
     with os.scandir(simu_folderpath) as folder:
         for file in folder:
@@ -753,8 +758,14 @@ def combine_simul_data(simu_folderpath, fit=False, plot=False):
                     if len(fd_roots_filtered) > 0:
                         rupture_distance = min(fd_roots_filtered).real
                     else:
-                        print(f'No ROOTS FOUND FOR angle={angle}, Rs={Rs}')
+                        print(f'No ROOTS FOUND FOR angle={angle}, Rs={Rs/h_max}')
                         pass
+                    
+                    #intercept of fd slope at d=0
+                    fd_fit_der = np.polyder(fd_fit_dict[angle])
+                    slope_intercept = abs(np.polyval(fd_fit_dict[angle],0)/np.polyval(fd_fit_der,0))
+                    print(Rs/h_max, slope_intercept, angle)
+
                     #print(Rs, angle, rupture_distance) #CHECK!
                     simu_df_anal_temp = pd.DataFrame({'Contact_Radius':[Rs/h_max],
                                                       'Drop_height':[h_max],

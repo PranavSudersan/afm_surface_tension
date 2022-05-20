@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import seaborn as sns
 import plotly.graph_objects as go
-
+import scipy.ndimage as ndimage
 #from afm_analyze import JPKAnalyze
 #from plotly_viewer import PlotlyViewer
 from plot2widget import PlotWidget
@@ -143,6 +143,7 @@ class AFMPlot:
         if self.CLICK_STATUS == False:
             self.init_fd_plot()
             self.CLICK_STATUS = True
+            self.cursor_index = [0, -1]
 
         sns.lineplot(x=x, y=y, style=style,
                      data=df, ax=self.ax_fd,
@@ -225,9 +226,16 @@ class AFMPlot:
 #             x0 = min(xdata)
 #             dydx = 2*retract_fit[0]*x0 + retract_fit[1]
 #             y0 = fit_poly(x0)
-#             print(y0-ydata[0], dydx, (abs(y0-ydata[0])/dydx))
-            #print('polyfit x intercept',min(np.roots(retract_fit))-min(xdata))
-            #print('cursor range', abs(xdata[xstart]-xdata[xend]))
+            
+#             force_sobel = ndimage.sobel(ydata) #sobel transform
+#             idx_min = np.argmin(force_sobel)
+#             snapin_distance = xdata[idx_min] - x0
+            
+#             intercept = (abs(y0-ydata[0])/dydx)
+            
+#             print(y0-ydata[0], dydx, intercept, snapin_distance, intercept/snapin_distance)
+#             #print('polyfit x intercept',min(np.roots(retract_fit))-min(xdata))
+#             print('cursor range', abs(xdata[xstart]-xdata[xend]))
 
     
     def on_close(self, event):
