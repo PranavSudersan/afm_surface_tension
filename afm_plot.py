@@ -483,30 +483,6 @@ def simul_plot3(simu_df):
     return fig
 
 
-def simul_plot(simu_df, x_var, y_var, hue_var, title, xlabel, ylabel, leglabel, fit_order=None):
-    sns.set_context("talk")
-    sns.set_style("ticks")
-
-    g = sns.lmplot(x=x_var,y=y_var,hue=hue_var,
-                   data=simu_df,
-                   legend='full',palette='flare',
-                   order=fit_order, ci=None,
-                   height=8, aspect=1.3)
-    ax1 = g.ax
-    ax1.set_title(title)
-    ax1.set_xlabel(xlabel)
-    ax1.set_ylabel(ylabel)
-
-    leg = g.legend
-    leg.set_title(leglabel)
-    for t in leg.texts:
-    # truncate label text to 4 characters
-        t.set_text(t.get_text()[:4])
-    fig = g.fig
-    #plt.show(block=True)
-
-    return fig
-
 ##    def plot_2dfit(self, df, plot_params, fit_output):
 ##        x = plot_params['x']
 ##        y = plot_params['y']
