@@ -3,11 +3,11 @@ import pandas as pd
 import numpy as np
 import os
 
-def combine_simul_data(simu_folderpath, fit=False, plot=False):
+def combine_simul_data(simu_folderpath, fit=False, fd_fit_order = 2, plot=False):
     simu_df = pd.DataFrame()
     simu_df_anal = pd.DataFrame()
     fd_fit_dict = {}
-    fd_fit_order = 2 #(CHECK ORDER!)
+    #fd_fit_order = 2 #(CHECK ORDER!)
     force_var = 'Force_fit' #Force_Calc,Force_Eng,Force_fit
     with os.scandir(simu_folderpath) as folder:
         for file in folder:
@@ -17,8 +17,8 @@ def combine_simul_data(simu_folderpath, fit=False, plot=False):
                 angle = df_temp['Top_Angle'].iloc[0]
                 Rs = df_temp['Contact_Radius'].iloc[0]
                                     
-                #3rd order Polynomial fit of ED data to get force by derivative
-                ed_fit = np.polyfit(df_temp['Height'], df_temp['Energy'], 3)
+                #higher order Polynomial fit of ED data to get force by derivative
+                ed_fit = np.polyfit(df_temp['Height'], df_temp['Energy'], fd_fit_order+1)
                 #print('Energy fit', ed_fit)
                 df_temp['Force_fit'] = -(3*ed_fit[0]*(df_temp['Height']**2) \
                                          + (2*ed_fit[1]*df_temp['Height']) + \
@@ -63,7 +63,7 @@ def combine_simul_data(simu_folderpath, fit=False, plot=False):
                     #intercept of fd slope at d=0
                     fd_fit_der = np.polyder(fd_fit_dict[angle])
                     slope_intercept = abs(np.polyval(fd_fit_dict[angle],0)/np.polyval(fd_fit_der,0))
-                    print(Rs/h_max, slope_intercept, angle)
+                    #print(Rs/h_max, slope_intercept, angle)
 
                     #print(Rs, angle, rupture_distance) #CHECK!
                     simu_df_anal_temp = pd.DataFrame({'Contact_Radius':[Rs/h_max],
@@ -101,7 +101,7 @@ def combine_simul_data(simu_folderpath, fit=False, plot=False):
     return simu_df, simu_df_anal, fig
 
 #combine data from subfolders
-def combine_simul_dirs(simu_folderpath, plot=False):
+def combine_simul_dirs(simu_folderpath, fd_fit_order=2, plot=False):
     simu_df = pd.DataFrame()
     simu_df_anal = pd.DataFrame()
     #plot_type = 'FD' if plot == True else None
@@ -111,6 +111,7 @@ def combine_simul_dirs(simu_folderpath, plot=False):
             if fdr.is_dir():
                 df_temp, simu_df_anal_temp, fig = combine_simul_data(fdr.path,
                                                                      fit=True,
+                                                                     fd_fit_order=fd_fit_order,
                                                                      plot=plot)
                 #simul_plot2(df_temp)
                 simu_df = simu_df.append(df_temp)
@@ -119,7 +120,7 @@ def combine_simul_dirs(simu_folderpath, plot=False):
     #simu_df.to_excel('simu_out.xlsx')
 
     if plot == True:
-        simu_df_anal = simu_df_anal.query('`Top_Angle`>30 & `Contact_Radius`<7') #CHECK filtering
+        #simu_df_anal = simu_df_anal.query('`Top_Angle`>30 & `Contact_Radius`<7') #CHECK filtering
         fig1 = simul_plot(simu_df_anal,
                           x_var='Rupture_Distance',
                           y_var='Top_Angle',

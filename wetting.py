@@ -4,10 +4,12 @@ from matplotlib.pyplot import cm
 from matplotlib import pyplot as plt
 import sys
 import os
+import traceback
 #import copy
 import pandas as pd
 import numpy as np
 from scipy import integrate
+import scipy.ndimage as ndimage
 
 
 def get_afm_image(file_path, output_dir, level_order=1, jump_tol=0.8):
@@ -240,15 +242,17 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
     y_array = df_adh['Y']
     data_dict = {'Label': [],
                 'Adhesion (FD)': [],
+                'Jumpin distance (FD)': [],
                 'Slope (FD)': [],
                 'Wetted length (FD)': [],
-                'Rupture distance (FD)': [],
+                'Fit distance (FD)': [],
                 'Adhesion energy (FD)': [],
                 'FD X position': [],
                 'FD Y position': [],
                 'FD file' : []
                 }
     fdfit_dict = {}
+    fddata_dict = {}
     afm_plot = AFMPlot()
     #colors
     evenly_spaced_interval = np.linspace(0, 1, len(fd_file_paths))
@@ -295,7 +299,7 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
             #distance_zero = distance_data[adh_id] #CHECK THIS!
             
             adhesion = force_zero - force_data_dict[force_cycle].min()
-            
+            adh_id = np.argmin(force_data_dict[force_cycle])
             
             #get FD slope at retract
 ##            num_points = len(df.index)
@@ -312,7 +316,7 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
             #plot FD
             label_text = str(label)
             
-            afm_plot.plot_line(df, plot_params, label_text=label_text, color='r')
+            afm_plot.plot_line(df, plot_params, label_text=label_text)#, color=plot_params['style'])
 ##            ylim = afm_plot.ax_fd.get_ylim()
 ##            afm_plot.ax_fd.plot(d_retract,f_fit, label=label_text, color=colors[i])
 ##            afm_plot.ax_fd.set_ylim(ylim)
@@ -320,11 +324,20 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
             afm_plot.xAxisData = distance_data_dict[force_cycle]#d_retract.to_numpy()
             afm_plot.yAxisData = force_data_dict[force_cycle]#force_data[int(num_points/2):]
             afm_plot.fd_fit_order = fit_order #CHECK FIT ORDER
-        
-            afm_plot.plotWidget.wid.updateCursor(afm_plot.plotWidget.wid.cursor1,
-                                                 afm_plot.xAxisData.min())
-            afm_plot.plotWidget.wid.updateCursor(afm_plot.plotWidget.wid.cursor2,
-                                                 afm_plot.xAxisData.max())
+            
+            #calculate jumpin distance
+            approachdata_sobel = ndimage.sobel(force_data_dict['approach']) #sobel transform
+            jumpin_id = np.argmin(approachdata_sobel)
+            jumpin_distance = distance_data_dict['approach'][jumpin_id] - distance_data_dict['approach'].min()
+            afm_plot.ax_fd.plot(distance_data_dict['approach'][jumpin_id], force_data_dict['approach'][jumpin_id],
+                                marker='*', markersize='10')
+            print('jumpin distance', jumpin_distance)
+            jumpin_halfpos = distance_data_dict['approach'].min() + 0.5*jumpin_distance
+            afm_plot.plotWidget.wid.updateCursor(afm_plot.plotWidget.wid.cursor1, distance_data_dict['approach'][adh_id])
+                                                 #afm_plot.xAxisData.min())
+            afm_plot.plotWidget.wid.updateCursor(afm_plot.plotWidget.wid.cursor2, jumpin_halfpos)
+                                                 #afm_plot.xAxisData.max())
+            afm_plot.updatePosition(trigger=True)
             
 
             #legend remove duplicates and sort
@@ -340,6 +353,9 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
             afm_plot.ax_fd.autoscale(enable=True)
             afm_plot.ax_fd.relim()
             afm_plot.ax_fd.autoscale_view()
+            force_range_full = abs(force_data.min()-force_data.max())
+            afm_plot.ax_fd.set_ylim([force_data.min()-0.05*force_range_full, 
+                                     force_data.max()+0.05*force_range_full])
 
             afm_plot.plotWidget.wid.draw_idle()
             #plt.show()
@@ -347,8 +363,8 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
             afm_plot.plotWidget.showWindow()
 
             cursor_index = afm_plot.cursor_index #positions of cursors
-            rupture_distance = abs(afm_plot.xAxisData[cursor_index[1]] - afm_plot.xAxisData[cursor_index[0]])
-            print('rupture distance', rupture_distance)
+            fit_distance = abs(afm_plot.xAxisData[cursor_index[1]] - afm_plot.xAxisData[cursor_index[0]])
+            print('Fit distance', fit_distance)
             
             #FD fitting
 #             force_shifted = [x-force_zero for x in force_data]
@@ -360,33 +376,39 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
             force_shifted = [x-force_zero for x in force_data_dict[force_cycle]]
             distance_shifted = [x-distance_zero for x in distance_data_dict[force_cycle]]
             fit_slice = slice(cursor_index[0],cursor_index[1])
-            retract_fit = np.polyfit(distance_shifted[fit_slice],
-                                     force_shifted[fit_slice],afm_plot.fd_fit_order)
-            fdfit_dict[label] = [retract_fit, afm_plot.fd_fit_order]
+            fd_polyfit = np.polyfit(distance_shifted[fit_slice],
+                                     force_shifted[fit_slice],afm_plot.fd_fit_order) #fit same as shown in plot
+            fd_linfit = np.polyfit(distance_shifted[fit_slice],
+                                   force_shifted[fit_slice], 1) #for slope and wetted length calculation
+            fdfit_dict[label] = [fd_polyfit, afm_plot.fd_fit_order]
+            fddata_dict[label] = [distance_shifted[fit_slice], force_shifted[fit_slice]]
 #             fit_poly = np.poly1d(retract_fit)
 #             afm_plot.ax_fd.autoscale(enable=False)
 #             afm_plot.ax_fd.plot(d_retract, fit_poly(d_retract-d_retract.iloc[0])+force_zero, ':') #plot fit
             #print('fitting:', label, retract_fit)            
             #get wetted length
-            fd_roots = np.roots(retract_fit)
+            fd_roots = np.roots(fd_linfit)
             fd_roots_filtered = fd_roots[(fd_roots>0)]
             wetted_length = min(fd_roots_filtered)
             print('FD wetted length:', wetted_length)
             
             #get area under curve
-#             energy_slice = slice(int(num_points/2)+cursor_index[0],
-#                                  int(num_points/2)+cursor_index[1])
-            energy_adhesion = integrate.simps(force_shifted[fit_slice],
-                                              distance_shifted[fit_slice])
+            energy_rangeid = [jumpin_id, (np.abs(distance_data_dict[force_cycle]\
+                                                 -distance_data_dict[force_cycle][cursor_index]\
+                                                 .min())).argmin()] #np.argmin(distance_shifted)
+            energy_rangeid.sort()
+            energy_slice = slice(*energy_rangeid)
+            energy_adhesion = integrate.simps(force_shifted[energy_slice],
+                                              distance_shifted[energy_slice])
             print('energy',label, energy_adhesion)
             
-            afm_plot.ax_fd.fill_between(distance_data_dict[force_cycle][fit_slice],
+            afm_plot.ax_fd.fill_between(distance_data_dict[force_cycle][energy_slice],
                                         force_zero,
-                                        force_data_dict[force_cycle][fit_slice],
-                                        color = 'black', alpha=0.5)
+                                        force_data_dict[force_cycle][energy_slice],
+                                        color = 'black', alpha=0.1)
             
             fig_savepath = f'{output_path}/FD_curves_{label_text}.png'
-            fig_list.append(fig_savepath)
+            fig_list.append(afm_plot.fig_fd)
             #plt.show(block=True)
             afm_plot.fig_fd.savefig(fig_savepath, bbox_inches = 'tight',
                                     transparent = False)
@@ -397,16 +419,18 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
 #                                 rupture_distance, energy_adhesion]
             data_dict['Label'].append(label)
             data_dict['Adhesion (FD)'].append(adhesion)
-            data_dict['Slope (FD)'].append(retract_fit[0])
+            data_dict['Jumpin distance (FD)'].append(jumpin_distance)
+            data_dict['Slope (FD)'].append(fd_linfit[0])
             data_dict['Wetted length (FD)'].append(wetted_length)
-            data_dict['Rupture distance (FD)'].append(rupture_distance)
+            data_dict['Fit distance (FD)'].append(fit_distance)
             data_dict['Adhesion energy (FD)'].append(energy_adhesion)
             data_dict['FD X position'].append(x_rot)
             data_dict['FD Y position'].append(y_rot)
             data_dict['FD file'].append(file_path)
             
         except Exception as e:
-            print(e)
+            tb1 = traceback.TracebackException.from_exception(e)
+            print(''.join(tb1.format()))
             continue
     
     output_df = pd.DataFrame(data_dict)
@@ -425,7 +449,7 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
 ##        afm_plot.ax_fd.autoscale(enable=True)
 ##        afm_plot.fig_fd.savefig(f'{output_path}/FD_curves.png', bbox_inches = 'tight',
 ##                                transparent = False)
-    return output_df, fdfit_dict, fig_list
+    return output_df, fdfit_dict, fddata_dict, fig_list
 
 
 def get_surface_tension(output_df, simu_df, contact_angle, fd_file_paths,
@@ -508,7 +532,7 @@ def get_surface_tension(output_df, simu_df, contact_angle, fd_file_paths,
     #save final output
     if save == True:
         afm_filename = output_df['AFM file'].iloc[0].split('/')[-1][:-4]
-        output_df.to_excel(f'{file_path}/output_FR-{afm_filename}.xlsx', index=None)
+        output_df.to_excel(f'{file_path}/output_FR-{afm_filename}.xlsx')
 
     return output_df
 
@@ -561,8 +585,9 @@ def get_contact_angle(file_path, simu_df, R, s, fit_index=10000):
     return contact_angle
 
 #calculate surface tension iteratively from force-distance curves
-def get_surface_tension2(output_df, simu_df, tolerance, fd_file_paths,
+def get_surface_tension2(drop_df, simu_df, tolerance, fd_file_paths,
                         file_path, save=False):
+    output_df = drop_df.copy()
     if fd_file_paths != None:
         output_df['yd/F'] = 0.0
         output_df['Surface Tension FD (mN)'] = 0.0
@@ -631,7 +656,7 @@ def get_surface_tension2(output_df, simu_df, tolerance, fd_file_paths,
         #save final output
         if save == True:
             afm_filename = output_df['AFM file'].iloc[0].split('/')[-1][:-4]
-            output_df.to_excel(f'{file_path}/output_FDiter-{afm_filename}.xlsx', index=None)
+            output_df.to_excel(f'{file_path}/output_FDiter-{afm_filename}.xlsx')
 
     return output_df
 
@@ -649,7 +674,7 @@ def get_surface_tension3(drop_df, simu_df_anal, fixed_contact_angle, fd_file_pat
 ##                R = min([3.5,round(output_df['R/s'].loc[i])]) #CHECK 3.5 (limit)
             R = min(simu_df_anal['Contact_Radius'].unique(),
                     key=lambda x:abs(x-output_df['R/d'].loc[i]))
-            rupture_distance = output_df['Rupture distance (FD)'].loc[i]
+            #rupture_distance = output_df['Rupture distance (FD)'].loc[i]
             wetted_length = output_df['Wetted length (FD)'].loc[i]
             s = output_df['s'].loc[i]
             d = output_df['Max Height'].loc[i] #max drop height
@@ -688,7 +713,7 @@ def get_surface_tension3(drop_df, simu_df_anal, fixed_contact_angle, fd_file_pat
             F_fit_fixed = np.polyval(fa_fit,fixed_contact_angle)
             tension_fixed = 1000*(-1/(2*np.pi*F_fit_fixed))*F_adh/d
             
-            output_df.at[i,'Simulation R/s'] = R
+            output_df.at[i,'Simulation R/d'] = R
             output_df.at[i,'Surface Tension (rupture, mN)'] = tension_actual
             output_df.at[i,'Tip contact angle (rupture)'] = contact_angle
             output_df.at[i,'F_fit_actual'] = F_fit_actual
@@ -703,18 +728,19 @@ def get_surface_tension3(drop_df, simu_df_anal, fixed_contact_angle, fd_file_pat
     #save final output
     if save == True:
         afm_filename = output_df['AFM file'].iloc[0].split('/')[-1][:-4]
-        output_df.to_excel(f'{file_path}/output_rupture-{afm_filename}.xlsx', index=None)
+        output_df.to_excel(f'{file_path}/output_rupture-{afm_filename}.xlsx')
 
     return output_df
 
-import seaborn as sns
-
-def get_surface_tension4(afm_df, simu_df, fdfit_dict=None, file_path=None, save=False):
+def get_surface_tension4(afm_df, simu_df, fdfit_dict=None, fddata_dict=None, file_path=None, save=False):
     drop_df = afm_df.copy()
     force_var = 'Force_fit'
-    for i in drop_df.index:            
+    plt.style.use('seaborn-bright')
+    fig, ax = plt.subplots()
+    evenly_spaced_interval = np.linspace(0, 1, len(drop_df.index))
+    colors = [cm.rainbow(x) for x in evenly_spaced_interval]
+    for ind, i in enumerate(drop_df.index):            
             fd_fit = fdfit_dict[i]
-            
             
             contact_radius = drop_df['R/d'].loc[i]
             rs_nearest = min(simu_df['Contact_Radius'].unique(),
@@ -753,30 +779,50 @@ def get_surface_tension4(afm_df, simu_df, fdfit_dict=None, file_path=None, save=
                 ca_list.append(simu_ca)
                 RMSE_list.append(RMSE)
                 rsquare_list.append(rsquare)
+                
+                
             
             #find surface tension at minimum fitting error
             RMSEmin_ind = RMSE_list.index(min(RMSE_list))
+            drop_df.at[i,'Simulation R/d'] = rs_nearest
             drop_df.at[i,'Surface Tension (error min, mN)'] = surf_ten_list[RMSEmin_ind]*1000
             drop_df.at[i,'Tip contact angle (error min)'] = ca_list[RMSEmin_ind]
             drop_df.at[i,'RMSE (error min)'] = RMSE_list[RMSEmin_ind]
             drop_df.at[i,'R square (error min)'] = rsquare_list[RMSEmin_ind]
             
-                
+            ax.plot(simu_df_temp['Distance real'], simu_df_temp['Force real'], label=f'{i}', 
+                    linestyle=':', color=colors[ind]) #simu data plot            
+            ax.plot(fd_distance, fd_force, label=f'{i}', 
+                    linestyle='-.', color=colors[ind]) #exp data fit plot
+            ax.plot(fddata_dict[i][0], fddata_dict[i][1], label=f'{i}', 
+                    linestyle='-', color=colors[ind]) #exp data raw plot
             
   
-    g = sns.lineplot(x='Distance real',  y='Force real', hue= 'Top_Angle',
-                   data = simu_df_ca, marker= "o")
-    fig = g.figure
-    ax = g.axes
+#     g = sns.lineplot(x='Distance real',  y='Force real', hue= 'Top_Angle',
+#                   data = simu_df_ca, marker= "o")
+#     fig = g.figure
+#     ax = g.axes
     #print(fd_force, fd_distance)
-    ax.plot(fd_distance, fd_force, 'r')
+#     ax.plot(fd_distance, fd_force, 'r')
     #g.axes[0,0].set_ylim(min(simu_df_ca['Force real']), max(simu_df_ca['Force real']))
     #g.axes[0,0].set_xlim(min(simu_df_ca['Distance real']), max(simu_df_ca['Distance real']))
+    #ax.legend()
+    #create separate legends for color and style
+    handles, labels = ax.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))    
+    ax_lines = ax.get_lines()
+    # Create a legend for the first line.
+    legend2 = plt.legend([ax_lines[0], ax_lines[1], ax_lines[2]], ['simu', 'expt-fit', 'expt-raw'], loc='lower right')
+    # Add the legend manually to the current Axes
+    ax.add_artist(legend2)
+    ax.legend(by_label.values(), by_label.keys(), loc='upper left')
     
+    ax.ticklabel_format(axis='x', style='sci', scilimits=(-6,-6))
+    fig.suptitle('Poly fits: expt vs simulation')
     #save final output
     if save == True:
         afm_filename = drop_df['AFM file'].iloc[0].split('/')[-1][:-4]
-        drop_df.to_excel(f'{file_path}/output_polyfit-{afm_filename}.xlsx', index=None)
+        drop_df.to_excel(f'{file_path}/output_polyfit-{afm_filename}.xlsx')
             
     return drop_df, fig
             

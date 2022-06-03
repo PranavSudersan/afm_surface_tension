@@ -144,11 +144,21 @@ class AFMPlot:
             self.init_fd_plot()
             self.CLICK_STATUS = True
             self.cursor_index = [0, -1]
-
-        sns.lineplot(x=x, y=y, style=style,
+        #functionality to make extend/retract colors same or different
+        if color in df.columns:
+            hue_param = color
+            color_param = None
+        elif color == None:
+            hue_param = None
+            color_param = None
+        else:
+            hue_param = None
+            color_param = color
+            
+        sns.lineplot(x=x, y=y, style=style,hue=hue_param,
                      data=df, ax=self.ax_fd,
                      label = label_text, sort=False,
-                     color=color)
+                     color=color_param)
 ##        self.ax_fd.plot(df[x], df[y])
         self.ax_fd.ticklabel_format(style='sci', scilimits=(0,0))
         self.ax_fd.set_xlabel(x)
@@ -162,7 +172,7 @@ class AFMPlot:
 ##        df.to_excel('test-fd-data.xlsx')
 
     def init_fd_plot(self): #initialize force-distance plot
-        sns.set_theme(palette = 'Set2')
+        sns.set_theme(palette = 'husl')
         #self.sourceLabel = None
         #self.fig_fd = plt.figure('Line plot')
         self.fig_fd = Figure(figsize=(11, 5), dpi=100)
@@ -177,7 +187,7 @@ class AFMPlot:
                                          fixYLimits = False,
                                          method = self.updatePosition)
 
-    def updatePosition(self):
+    def updatePosition(self, trigger=False):
 
         # final_pos = tuple(self.plotWidget.wid.axes.transLimits.transform
         #                   ((self.plotWidget.wid.final_pos)))
@@ -186,8 +196,16 @@ class AFMPlot:
         # elif self.plotWidget.wid.clicked_artist == self.legend_main:
         #     pos = str(tuple(self.legend_main.get_window_extent()))
         #     self.configPlotWindow.plotDict['plot settings']['legend position'].setText(pos)
-        if self.plotWidget.wid.clicked_artist in [self.plotWidget.wid.cursor1,
-                                                    self.plotWidget.wid.cursor2]:
+        if trigger == False:
+            if self.plotWidget.wid.clicked_artist in [self.plotWidget.wid.cursor1,
+                                                      self.plotWidget.wid.cursor2]:
+                condition = True
+            else:
+                condition = False
+        else:
+            condition = True
+        
+        if condition == True:
 ##            if self.sourceLabel != None:
             xdata =  self.xAxisData
             ydata = self.yAxisData
