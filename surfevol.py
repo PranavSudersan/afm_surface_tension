@@ -44,7 +44,7 @@ def combine_simul_data(simu_folderpath, fit=False, fd_fit_order = 2, plot=False)
                 
                 df_temp = df_temp.query('`Height`<=0.5').reindex() #CHECK filtering
                 simu_df = simu_df.append(df_temp)
-                if fit == True:
+                if fit == True and not df_temp.empty:
 
                     adhesion = min(df_temp[force_var])
                     yd_F = -1/(2*np.pi*adhesion) #yd/F
@@ -120,7 +120,7 @@ def combine_simul_dirs(simu_folderpath, fd_fit_order=2, plot=False):
     #simu_df.to_excel('simu_out.xlsx')
 
     if plot == True:
-        #simu_df_anal = simu_df_anal.query('`Top_Angle`>30 & `Contact_Radius`<7') #CHECK filtering
+        simu_df_anal = simu_df_anal.query('`Top_Angle`>30 & `Contact_Radius`<7') #CHECK filtering
         fig1 = simul_plot(simu_df_anal,
                           x_var='Rupture_Distance',
                           y_var='Top_Angle',
@@ -142,7 +142,18 @@ def combine_simul_dirs(simu_folderpath, fd_fit_order=2, plot=False):
                           leglabel='Drop size, R/d',
                           fit_order=3)
         fig_list.append(fig2)
-
+        
+#         fig3 = simul_plot(simu_df[simu_df['Top_Angle']==90],
+#                          x_var='Height',
+#                          y_var='Force_fit',
+#                          hue_var='Tilt_Angle',
+#                          title=f'Simulation data (FD): CA=90',
+#                          xlabel='Height, h/d',
+#                          ylabel=r'$F/2\pi \gamma d$',
+#                          leglabel='Tilt angle',
+#                          fit_order=fd_fit_order)
+#         fig_list.append(fig3)
+        
     return simu_df, simu_df_anal, fig_list
 
 

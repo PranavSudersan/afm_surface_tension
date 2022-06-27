@@ -216,13 +216,13 @@ class JPKAnalyze(JPKRead):
             segment_header_dict = self.parse_header_file(segment_header)
             #get segment force data
             force_data = self.decode_data('vDeflection', segment_header_dict,
-                                          segment_dir)['force']#*1.8791985756808538/1.0813298069873634
+                                          segment_dir)['force']#*1.87920/1.08133
             #get piezo measured height data
             height_data = self.decode_data('measuredHeight', segment_header_dict,
                                            segment_dir)['nominal']
             #get cantilever deflection
             defl_data = self.decode_data('vDeflection', segment_header_dict,
-                                         segment_dir)['distance']#*3.361455619561316E-8/4.660000000000001E-8
+                                         segment_dir)['distance']#*33.6146/46.6018
             #tip sample distance
             distance_data = height_data + (defl_data)#-defl_data[0]
 

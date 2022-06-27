@@ -745,7 +745,7 @@ def get_surface_tension4(afm_df, simu_df, fdfit_dict=None, fddata_dict=None, fil
             contact_radius = drop_df['R/d'].loc[i]
             rs_nearest = min(simu_df['Contact_Radius'].unique(),
                              key=lambda x:abs(x-contact_radius))
-            simu_df_rs = simu_df[simu_df['Contact_Radius'] == rs_nearest].reset_index()
+            simu_df_rs = simu_df[simu_df['Contact_Radius'] == rs_nearest].reset_index(drop=True)
             
             #drop_adhesion = drop_df['Adhesion (FD)'].loc[i]
             drop_adhesion = -np.polyval(fd_fit[0], 0)
@@ -756,16 +756,18 @@ def get_surface_tension4(afm_df, simu_df, fdfit_dict=None, fddata_dict=None, fil
             rsquare_list = []
             ca_list = []
             for simu_ca in simu_df_rs['Top_Angle'].unique():
-                simu_df_temp = simu_df_rs[simu_df_rs['Top_Angle'] == simu_ca].reset_index()
+                simu_df_temp = simu_df_rs[simu_df_rs['Top_Angle'] == simu_ca].reset_index(drop=True)
                 surf_ten = -drop_adhesion/(2*np.pi*h_max*min(simu_df_temp[force_var]))
                 simu_df_temp['Distance real'] = simu_df_temp['Height']*h_max
-                force_real = simu_df_temp[force_var]*2*np.pi*surf_ten*h_max
-                simu_df_temp['Force real'] = force_real
+                simu_df_temp['Force real'] = simu_df_temp[force_var]*2*np.pi*surf_ten*h_max
+                height_range = [min(fddata_dict[i][0]), max(fddata_dict[i][0])]
+                simu_df_temp = simu_df_temp.query(f'`Distance real`>={height_range[0]} & `Distance real`<={height_range[1]}').reindex()
                 simu_df_ca = simu_df_ca.append(simu_df_temp)
                 
-                fd_distance = simu_df_temp['Distance real'].unique()
+                fd_distance = simu_df_temp['Distance real']#.unique()
                 fd_force = np.polyval(fd_fit[0], fd_distance)
-            
+                
+                force_real = simu_df_temp['Force real']
                 MSE = np.square(np.subtract(fd_force,force_real)).mean()  
                 RMSE = np.sqrt(MSE)
             
@@ -789,8 +791,10 @@ def get_surface_tension4(afm_df, simu_df, fdfit_dict=None, fddata_dict=None, fil
             drop_df.at[i,'Tip contact angle (error min)'] = ca_list[RMSEmin_ind]
             drop_df.at[i,'RMSE (error min)'] = RMSE_list[RMSEmin_ind]
             drop_df.at[i,'R square (error min)'] = rsquare_list[RMSEmin_ind]
+            #filter simulation data for minimum error
+            simu_df_ca_filtered = simu_df_ca[simu_df_ca['Top_Angle'] == ca_list[RMSEmin_ind]]
             
-            ax.plot(simu_df_temp['Distance real'], simu_df_temp['Force real'], label=f'{i}', 
+            ax.plot(simu_df_ca_filtered['Distance real'], simu_df_ca_filtered['Force real'], label=f'{i}', 
                     linestyle=':', color=colors[ind]) #simu data plot            
             ax.plot(fd_distance, fd_force, label=f'{i}', 
                     linestyle='-.', color=colors[ind]) #exp data fit plot
@@ -881,4 +885,5 @@ def combine_result_spreadsheets(folder_paths):
                     df_temp['Folder name'] = os.path.basename(f_p)
                     df_temp['File path'] = file.path
                     summary_df = summary_df.append(df_temp)
+    summary_df.replace(0, np.nan, inplace=True)
     return summary_df
