@@ -58,6 +58,7 @@ def combine_simul_data(simu_folderpath, fit=False, fd_fit_order = 2, plot=False)
                         rupture_distance = min(fd_roots_filtered).real
                     else:
                         print(f'No ROOTS FOUND FOR angle={angle}, Rs={Rs/h_max}')
+                        rupture_distance = 0
                         pass
                     
                     #intercept of fd slope at d=0

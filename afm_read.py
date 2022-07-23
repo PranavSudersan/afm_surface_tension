@@ -3,6 +3,7 @@ import pandas as pd
 import struct
 import zipfile
 import tifffile as tiff
+from igor import binarywave
 # import time
 
 class JPKRead:        
@@ -35,6 +36,19 @@ class JPKRead:
                     output[key] = np.append(output[key], value)
                 self.df[mode] = pd.DataFrame(self.anal_dict[mode]['output'])
 #             self.get_height_measured(file_path, modes)
+        elif self.file_format == 'ibw':
+            self.ibw_data_dict = self.read_ibw(self.file_path)
+            if self.ibw_data_dict['header']['raw data type'] == 'force':
+                modes = ['Force-distance']
+            else:
+                modes = ['Height (measured)']
+            for mode in modes:
+                result = self.analyze_ibw(mode=mode) 
+#                 result = self.anal_dict[mode]['function'](dirpath=self.segment_path)
+                for key, value in result.items():
+                    output = self.anal_dict[mode]['output']
+                    output[key] = np.append(output[key], value)
+                self.df[mode] = pd.DataFrame(self.anal_dict[mode]['output'])            
         else:
             self.data_zip = zipfile.ZipFile(self.file_path, 'r')
             self.get_data(modes, jump_tol=jump_tol)
@@ -230,3 +244,132 @@ class JPKRead:
 #         print(time.process_time() - start)
         self.df[mode] = pd.DataFrame(self.anal_dict[mode]['output'])
         eng.quit()
+        
+    #Reference code: https://github.com/AFM-analysis/afmformats/blob/master/afmformats/formats/fmt_igor.py
+    def read_ibw(self, filepath):
+        ibw = binarywave.load(filepath)
+        wdata = ibw["wave"]["wData"]
+        notes = {}
+        for line in str(ibw["wave"]["note"]).split("\\r"):
+            if line.count(":"):
+                key, val = line.split(":", 1)
+                try:
+                    notes[key] = float(val.strip())
+                except ValueError:
+                    notes[key] = val.strip()
+        
+        #CHECK THIS! MIGHT NOT WORK FOR SOME DATA
+        if 'ForceDist' in notes.keys():
+            notes['raw data type'] = 'force'
+        else:
+            notes['raw data type'] = 'image'
+            
+        for ll in ibw["wave"]["labels"]:
+            for li in ll:
+                if li:
+                    print(li.decode())
+#         print(ibw['wave'].keys())
+#         print(ibw['wave']["wave_header"])
+#         print(notes)
+#         print(wdata)
+#         print(wdata[0].shape)
+        # Metadata
+#         metadata = {}
+#         # acquisition
+#         for k,v in notes.items():
+#             metadata[k] = v
+        
+        # Data
+        labels = []
+        data = {}
+        ind = 0 
+        for ll in ibw["wave"]["labels"]:
+            for li in ll:
+                if li:
+                    labelname = li.decode()
+                    data[labelname] = wdata[..., ind]
+                    ind += 1
+#         print(wdata.shape, len(data.keys()))
+#         print(data)
+        assert len(data.keys()) == wdata.shape[-1]
+
+        for fkey in ["Defl", "Deflection"]:
+            if fkey in data.keys():
+                # force is in [m] (convert to [N])
+                data["force"] = data["Defl"] \
+                    * notes['SpringConstant']
+                break
+        dataset = {"data": data,
+                   "header": notes,
+                  }
+        return dataset
+    
+    def analyze_ibw(self, mode):
+        ibw_data_dict = self.ibw_data_dict
+        if mode == 'Height (measured)':
+            trace = self.anal_dict[mode]['misc']['trace']
+            if trace == 'average':
+                z_data = np.mean([ibw_data_dict['data']['HeightTrace'],
+                                  ibw_data_dict['data']['HeightRetrace']], axis=0)
+            elif trace == 'trace':
+                z_data = ibw_data_dict['data']['HeightTrace']
+            elif trace == 'retrace':
+                z_data = ibw_data_dict['data']['HeightRetrace']
+            
+            x0 = ibw_data_dict['header']['XOffset']
+            y0 = ibw_data_dict['header']['YOffset']
+            x_len = ibw_data_dict['header']['FastScanSize']
+            y_len = ibw_data_dict['header']['SlowScanSize']
+            x_num = int(ibw_data_dict['header']['ScanPoints'])
+            y_num = int(ibw_data_dict['header']['ScanLines'])
+            scan_angle = ibw_data_dict['header']['ScanAngle']
+            x_data = np.linspace(x0, x0+x_len, num=x_num)
+            y_data = np.linspace(y0, y0-y_len, num=y_num) #CHECK THIS
+            xx_data, yy_data = np.meshgrid(x_data, y_data)
+    #         mode = modes[0] #CHECK
+            self.rotation_info = [x0, y0, scan_angle]
+    #         start = time.process_time()
+    #         print(x_num,y_num)
+
+            #USE SAME KEYS AS ANALYSIS_MODE_DICT!
+            result_dict = {'Height': np.array(z_data).flatten(),
+                           'X': xx_data.flatten(), 
+                           'Y':yy_data.flatten(),
+                           'Segment folder': [None]*(x_num*y_num)}
+            
+        elif mode == 'Force-distance':
+            #USE SAME KEYS AS ANALYSIS_MODE_DICT
+            result_dict = {'Force': [], 'Measured height': [], 'Distance': [], 'Segment': [],
+                           'Segment folder': [], 'X': [], 'Y': []}
+            #TODO: get segment info from header files
+            idx_max = np.argmax(ibw_data_dict['data']['force'])
+            segment_slices = {'extend':slice(0,idx_max), 
+                              'retract':slice(idx_max,len(ibw_data_dict['data']['force']))}
+            print('slice', segment_slices)
+            for seg_name, seg_slice in segment_slices.items():        
+                #get segment force data
+                force_data = ibw_data_dict['data']['force'][seg_slice]
+                #get piezo measured height data
+                height_data = -ibw_data_dict['data']['ZSnsr'][seg_slice]
+                #get cantilever deflection
+                defl_data = ibw_data_dict['data']['Defl'][seg_slice]
+                #tip sample distance
+                distance_data = height_data + (defl_data)#-defl_data[0]
+
+                #get position
+                x_pos, y_pos = ibw_data_dict['header']['XLVDT'], ibw_data_dict['header']['YLVDT']
+
+                result_dict['Force'] = np.append(result_dict['Force'],force_data)
+                result_dict['Measured height'] = np.append(result_dict['Measured height'],height_data)
+                result_dict['Distance'] = np.append(result_dict['Distance'],distance_data)
+                len_data = len(force_data)
+                result_dict['Segment'] = np.append(result_dict['Segment'],
+                                                   len_data * [seg_name])
+                result_dict['Segment folder'] = np.append(result_dict['Segment folder'],
+                                                          len_data * [None])
+                result_dict['X'] = np.append(result_dict['X'],
+                                             len_data * [x_pos])
+                result_dict['Y'] = np.append(result_dict['Y'],
+                                             len_data * [y_pos])
+        
+        return result_dict

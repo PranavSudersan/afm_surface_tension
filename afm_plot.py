@@ -157,7 +157,7 @@ class AFMPlot:
             
         sns.lineplot(x=x, y=y, style=style,hue=hue_param,
                      data=df, ax=self.ax_fd,
-                     label = label_text, sort=False,
+                     label = label_text, sort=False, ci=None,
                      color=color_param)
 ##        self.ax_fd.plot(df[x], df[y])
         self.ax_fd.ticklabel_format(style='sci', scilimits=(0,0))

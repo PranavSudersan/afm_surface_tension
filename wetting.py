@@ -16,7 +16,7 @@ def get_afm_image(file_path, output_dir, level_order=1, jump_tol=0.8):
     #import data
     jpk_data = JPKAnalyze(file_path, None, jump_tol=jump_tol)
     
-    if jpk_data.file_format == 'jpk':
+    if jpk_data.file_format in ['jpk','ibw']:
         segment_mode = 'Height (measured)'
         volume_mode = 'Height (measured)'
         rotation_info = jpk_data.rotation_info
@@ -78,7 +78,7 @@ def get_drop_prop(jpk_data, anal_data_h, output_dir, level_order=1):
                    'Volume': [], 'Volume raw':[],
                    'Drop contact angle': []}
     
-    if jpk_data.file_format == 'jpk':
+    if jpk_data.file_format in ['jpk','ibw']: #TODO clean this up! combine with above and below
         segment_mode = 'Height (measured)'
         volume_mode = 'Height (measured)'
         #rotation_info = jpk_data.rotation_info
@@ -226,7 +226,7 @@ def get_drop_prop(jpk_data, anal_data_h, output_dir, level_order=1):
 def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
                     force_cycle='approach', fit_order=1, output_path=None):
     
-    if jpk_map.file_format == 'jpk':
+    if jpk_map.file_format in ['jpk','ibw']:
         segment_mode = 'Height (measured)'
         #volume_mode = 'Height (measured)'
         rotation_info = jpk_map.rotation_info
@@ -281,20 +281,24 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
         #print(y_index,x_index,img_anal.masked[y_index,x_index])
         num_points = len(df.index)
         try:
-            label = int(img_anal.masked[y_index,x_index])
+            #.ibw files or when only one force data exists, then take the only label found to be the drop. HACKY. CHANGE THIS!
+            if jpk_data.file_format == 'ibw' or len(fd_file_paths) == 1:
+                label = img_anal.masked.max()
+            else:
+                label = int(img_anal.masked[y_index,x_index])
             #get adhesion
             force_data = df['Force'].to_numpy()
             distance_data = df['Distance'].to_numpy()
             #d_retract = df['Distance'][int(num_points/2):]
             
-            force_data_dict = {'approach': force_data[:int(num_points/2)],
-                               'retract': force_data[int(num_points/2):]}
-            distance_data_dict = {'approach': distance_data[:int(num_points/2)],
-                                  'retract': distance_data[int(num_points/2):]}
+            force_data_dict = {'approach': df[df['Segment']=='extend']['Force'].to_numpy(),#force_data[:int(num_points/2)],
+                               'retract': df[df['Segment']=='retract']['Force'].to_numpy()}#force_data[int(num_points/2):]}
+            distance_data_dict = {'approach': df[df['Segment']=='extend']['Distance'].to_numpy(),#distance_data[:int(num_points/2)],
+                                  'retract': df[df['Segment']=='retract']['Distance'].to_numpy()}#distance_data[int(num_points/2):]}
             #print(force_data_dict)
             #print(distance_data_dict)
             force_zero = np.average(force_data[:100]) #CHECK RANGE FOR ZERO FORCE
-            distance_zero = np.average(distance_data[int(num_points/2)]) #CHECK  DISTANCE OF CONTACT POINT
+            distance_zero = np.average(distance_data[np.argmax(force_data)]) #CHECK  DISTANCE OF CONTACT POINT
             #adh_id = np.argmin(force_data)
             #distance_zero = distance_data[adh_id] #CHECK THIS!
             
@@ -333,7 +337,7 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
                                 marker='*', markersize='10')
             print('jumpin distance', jumpin_distance)
             jumpin_halfpos = distance_data_dict['approach'].min() + 0.5*jumpin_distance
-            afm_plot.plotWidget.wid.updateCursor(afm_plot.plotWidget.wid.cursor1, distance_data_dict['approach'][adh_id])
+            afm_plot.plotWidget.wid.updateCursor(afm_plot.plotWidget.wid.cursor1, distance_data_dict[force_cycle][adh_id])
                                                  #afm_plot.xAxisData.min())
             afm_plot.plotWidget.wid.updateCursor(afm_plot.plotWidget.wid.cursor2, jumpin_halfpos)
                                                  #afm_plot.xAxisData.max())
@@ -392,10 +396,14 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
             wetted_length = min(fd_roots_filtered)
             print('FD wetted length:', wetted_length)
             
-            #get area under curve
-            energy_rangeid = [jumpin_id, (np.abs(distance_data_dict[force_cycle]\
-                                                 -distance_data_dict[force_cycle][cursor_index]\
-                                                 .min())).argmin()] #np.argmin(distance_shifted)
+            #get area under curve CHECK THIS!
+#             energy_rangeid = [jumpin_id, (np.abs(distance_data_dict[force_cycle]\
+#                                                  -distance_data_dict[force_cycle][cursor_index]\
+#                                                  .min())).argmin()] #np.argmin(distance_shifted)
+            retractdata_sobel = ndimage.sobel(force_data_dict['retract']) #sobel transform
+            pulloff_id = np.argmin(approachdata_sobel)
+            snap_id_dict = {'approach': jumpin_id, 'retract': pulloff_id}
+            energy_rangeid = [adh_id, snap_id_dict[force_cycle]]
             energy_rangeid.sort()
             energy_slice = slice(*energy_rangeid)
             energy_adhesion = integrate.simps(force_shifted[energy_slice],
@@ -687,9 +695,12 @@ def get_surface_tension3(drop_df, simu_df_anal, fixed_contact_angle, fd_file_pat
                                sort_values(by=['Rupture_Distance'])
         ##    print(simu_df_filtered['Average Wetted Height'],simu_df_filtered['Top_Angle'])
             #3rd order polynomial fit of rupture distance-Contact angle data
-            wa_fit = np.polyfit(simu_df_filtered['Rupture_Distance'],
-                                simu_df_filtered['Top_Angle'], 3)
-            contact_angle = np.polyval(wa_fit,wetted_length/d) #choose:rupture_distance,wetted_length
+            try: #REMOVE THIS LATER
+                wa_fit = np.polyfit(simu_df_filtered['Rupture_Distance'],
+                                    simu_df_filtered['Top_Angle'], 3)
+                contact_angle = np.polyval(wa_fit,wetted_length/d) #choose:rupture_distance,wetted_length
+            except:
+                contact_angle = 30
             
             
 #             ca_nearest = min(simu_df['Top_Angle'].unique(),
@@ -847,7 +858,7 @@ def combine_fd(file_paths, zero_shift=False, output_dir=None, save=False):
             distance_zero = fd_data.df[mode][plot_params['x']].iloc[int(num_pts/2)]
             fd_data.df[mode][plot_params['y']] -= force_zero
             fd_data.df[mode][plot_params['x']] -= distance_zero
-        label_text = file_path.split('/')[-1].split('-')[3] #CHANGE INDEX   
+        label_text = f'{i}' #file_path.split('/')[-1].split('-')[3] #CHANGE INDEX   
         afm_plot.plot_line(fd_data.df[mode], plot_params, label_text,
                           color=colors[i])
     
