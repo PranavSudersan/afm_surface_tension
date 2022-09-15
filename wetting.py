@@ -460,82 +460,97 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
     return output_df, fdfit_dict, fddata_dict, fig_list
 
 
-def get_surface_tension(output_df, simu_df, contact_angle, fd_file_paths,
-                        file_path, save=False):
+def get_surface_tension(drop_df, simu_df, contact_angle, tip_angle=None,
+                        fd_file_paths=None, file_path=None, save=False):
     
     #import simulation data
 ##    simu_filepath = 'E:/Work/Surface Evolver/afm_pyramid/data/20210325_nps/height=0/'\
 ##                    'data-CA_p30-h 0-Rsi1.5_Rsf3.5.txt'
 ##    simu_df = pd.read_csv(simu_filepath,delimiter='\t')
-    if contact_angle != None:
-        ca_nearest = min(simu_df['Top_Angle'].unique(),
-                         key=lambda x:abs(x-contact_angle))
-        simu_df_filtered = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index()
-    ##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
+#     if contact_angle != None:
+#         ca_nearest = min(simu_df['Top_Angle'].unique(),
+#                          key=lambda x:abs(x-contact_angle))
+#         simu_df_filtered = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index()
+#     ##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
 
-        #3rd order polynomial fit of Force-Contact radius data
-        fr_fit = np.polyfit(simu_df_filtered['Contact_Radius'], simu_df_filtered['Force_Calc'], 3)
-        output_df['F_fit'] = np.polyval(fr_fit,output_df['R/s'])
-        output_df['ys/F'] = -1/(2*np.pi*output_df['F_fit']) #inverse
+#         #3rd order polynomial fit of Force-Contact radius data
+#         fr_fit = np.polyfit(simu_df_filtered['Contact_Radius'], simu_df_filtered['Force_Calc'], 3)
+#         output_df['F_fit'] = np.polyval(fr_fit,output_df['R/s'])
+#         output_df['ys/F'] = -1/(2*np.pi*output_df['F_fit']) #inverse
 
-        #surface tension in mN/m
-        output_df['Surface Tension (mN)'] = 1000*output_df['ys/F']*output_df['Max Adhesion']/\
-                                       output_df['s']
+#         #surface tension in mN/m
+#         output_df['Surface Tension (mN)'] = 1000*output_df['ys/F']*output_df['Max Adhesion']/\
+#                                        output_df['s']
 
-        #miscellaneous data
-        output_df['Simulation contact angle'] = ca_nearest
-        output_df['Simulation file'] = simu_df_filtered['File path'].iloc[0]
+#         #miscellaneous data
+#         output_df['Simulation contact angle'] = ca_nearest
+#         output_df['Simulation file'] = simu_df_filtered['File path'].iloc[0]
         
-        print(output_df['Surface Tension (mN)'])
-
+#         print(output_df['Surface Tension (mN)'])
+    
+    output_df = drop_df.copy()
     if fd_file_paths != None:
         if contact_angle != None:
-            output_df['Surface Tension FD (mN)'] = 1000*output_df['ys/F']*output_df['Adhesion (FD)']/\
-                                                   output_df['s']
+            ca_nearest = min(simu_df['Top_Angle'].unique(),
+                             key=lambda x:abs(x-contact_angle))
+            simu_df_filtered = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index()
+            if tip_angle != None:#Cone_Angle,Front_Angle
+                simu_df_filtered = simu_df_filtered[simu_df_filtered['Cone_Angle'] == tip_angle].reset_index()
+                output_df['Tip angle'] = tip_angle
+        ##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
+
+            #3rd order polynomial fit of Force-Contact radius data
+            fr_fit = np.polyfit(simu_df_filtered['Contact_Radius'], simu_df_filtered['Adhesion'], 3)
+            output_df['F_fit'] = np.polyval(fr_fit,output_df['R/d'])
+            output_df['yd/F'] = -1/(2*np.pi*output_df['F_fit']) #inverse
+            output_df['Surface Tension FD (mN)'] = 1000*output_df['yd/F']*output_df['Adhesion (FD)']/\
+                                                   output_df['Max Height']
+            output_df['Simulation contact angle'] = ca_nearest
         else:
             output_df['F_fit'] = 0.0
-            output_df['ys/F'] = 0.0
+            output_df['yd/F'] = 0.0
             output_df['Simulation contact angle'] = 0.0
             output_df['Simulation file'] = ''
-            for i in output_df.index:
-##                R = min([3.5,round(output_df['R/s'].loc[i])]) #CHECK 3.5 (limit)
-                R = min(simu_df['Contact_Radius'].unique(),
-                        key=lambda x:abs(x-output_df['R/s'].loc[i]))
-                wetted_length = output_df['Wetted length (FD)'].loc[i]
-                s = output_df['s'].loc[i]
-                F_adh = output_df['Adhesion (FD)'].loc[i]
-                print(output_df['R/s'].loc[i],R,s)
-            ##    R = 2.8 # R/s INPUT
-            ##    s = 2.44e-6 # s value (in meters from jumpin analysis INPUT
-                #TODO: use interpolated values instead of filtering
-                simu_df_filtered = simu_df[simu_df['Contact_Radius'] == R].\
-                                   sort_values(by=['Average Wetted Height'])
-            ##    print(simu_df_filtered['Average Wetted Height'],simu_df_filtered['Top_Angle'])
-                #3rd order polynomial fit of Wetted length-Contact angle data
-                wa_fit = np.polyfit(simu_df_filtered['Average Wetted Height'],
-                                    simu_df_filtered['Top_Angle'], 3)
-                contact_angle = np.polyval(wa_fit,wetted_length/s)                
-                ca_nearest = min(simu_df['Top_Angle'].unique(),
-                                 key=lambda x:abs(x-contact_angle))
-                print('Contact angle', contact_angle,ca_nearest)
-                simu_df_filtered2 = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index()
-            ##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
+#             for i in output_df.index:
+# ##                R = min([3.5,round(output_df['R/s'].loc[i])]) #CHECK 3.5 (limit)
+#                 R = min(simu_df['Contact_Radius'].unique(),
+#                         key=lambda x:abs(x-output_df['R/s'].loc[i]))
+#                 wetted_length = output_df['Wetted length (FD)'].loc[i]
+#                 s = output_df['s'].loc[i]
+#                 F_adh = output_df['Adhesion (FD)'].loc[i]
+#                 print(output_df['R/s'].loc[i],R,s)
+#             ##    R = 2.8 # R/s INPUT
+#             ##    s = 2.44e-6 # s value (in meters from jumpin analysis INPUT
+#                 #TODO: use interpolated values instead of filtering
+#                 simu_df_filtered = simu_df[simu_df['Contact_Radius'] == R].\
+#                                    sort_values(by=['Average Wetted Height'])
+#             ##    print(simu_df_filtered['Average Wetted Height'],simu_df_filtered['Top_Angle'])
+#                 #3rd order polynomial fit of Wetted length-Contact angle data
+#                 wa_fit = np.polyfit(simu_df_filtered['Average Wetted Height'],
+#                                     simu_df_filtered['Top_Angle'], 3)
+#                 contact_angle = np.polyval(wa_fit,wetted_length/s)                
+#                 ca_nearest = min(simu_df['Top_Angle'].unique(),
+#                                  key=lambda x:abs(x-contact_angle))
+#                 print('Contact angle', contact_angle,ca_nearest)
+#                 simu_df_filtered2 = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index()
+#             ##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
 
-                #3rd order polynomial fit of Force-Contact radius data
-                fr_fit = np.polyfit(simu_df_filtered2['Contact_Radius'],
-                                    simu_df_filtered2['Force_Calc'], 3)
-                F_fit = np.polyval(fr_fit,R)
-                ys_f = -1/(2*np.pi*F_fit) #inverse
-                tension = 1000*ys_f*F_adh/s
+#                 #3rd order polynomial fit of Force-Contact radius data
+#                 fr_fit = np.polyfit(simu_df_filtered2['Contact_Radius'],
+#                                     simu_df_filtered2['Force_Calc'], 3)
+#                 F_fit = np.polyval(fr_fit,R)
+#                 ys_f = -1/(2*np.pi*F_fit) #inverse
+#                 tension = 1000*ys_f*F_adh/s
                 
-                output_df.at[i,'Surface Tension FD (mN)'] = tension
-                output_df.at[i,'Simulation contact angle'] = contact_angle
-                output_df.at[i,'F_fit'] = F_fit
-                output_df.at[i,'ys/F'] = ys_f
-                output_df.at[i,'Simulation file'] = simu_df_filtered2['File path'].iloc[0]
+#                 output_df.at[i,'Surface Tension FD (mN)'] = tension
+#                 output_df.at[i,'Simulation contact angle'] = contact_angle
+#                 output_df.at[i,'F_fit'] = F_fit
+#                 output_df.at[i,'ys/F'] = ys_f
+#                 output_df.at[i,'Simulation file'] = simu_df_filtered2['File path'].iloc[0]
                 
     
         print(output_df['Surface Tension FD (mN)'])
+        print(simu_df_filtered)
         
     #save final output
     if save == True:

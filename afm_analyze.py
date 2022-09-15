@@ -54,7 +54,7 @@ class JPKAnalyze(JPKRead):
                                                                             'title': 'Height (measured)',
                                                                             'type': ['2d'],
                                                                             'points_flag':True},
-                                                         'misc': {'trace': 'average',#trace, retrace, average
+                                                         'misc': {'trace': 'retrace',#trace, retrace, average
                                                                   'calibration': 'nominal'}#nominal,degrees
                                                         },
                                    'Force-distance': {'function': self.get_force_distance,
