@@ -460,7 +460,7 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
     return output_df, fdfit_dict, fddata_dict, fig_list
 
 
-def get_surface_tension(drop_df, simu_df, contact_angle, tip_angle=None,
+def get_surface_tension(drop_df, simu_df_full, contact_angle, tip_angle=None,
                         fd_file_paths=None, file_path=None, save=False):
     
     #import simulation data
@@ -489,11 +489,12 @@ def get_surface_tension(drop_df, simu_df, contact_angle, tip_angle=None,
 #         print(output_df['Surface Tension (mN)'])
     
     output_df = drop_df.copy()
+    simu_df = simu_df_full[simu_df_full['Tip shape'] == 'Cone'].reset_index(drop=True)
     if fd_file_paths != None:
         if contact_angle != None:
             ca_nearest = min(simu_df['Top_Angle'].unique(),
                              key=lambda x:abs(x-contact_angle))
-            simu_df_filtered = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index()
+            simu_df_filtered = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index(drop=True)
             if tip_angle != None:#Cone_Angle,Front_Angle
                 simu_df_filtered = simu_df_filtered[simu_df_filtered['Cone_Angle'] == tip_angle].reset_index()
                 output_df['Tip angle'] = tip_angle
