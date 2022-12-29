@@ -357,6 +357,7 @@ class DataFit:
         return C + (abs((R**2)-((x-a)**2)-((y-b)**2)))**0.5
 
 #analyze processed data from JPKRead
+from matplotlib.path import Path
 class DataAnalyze:
     def __init__(self, jpk_anal, mode):
         self.plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']        
@@ -421,6 +422,72 @@ class DataAnalyze:
                                              columns=self.plot_x,
                                              aggfunc='first')
     
+    def level_data2(self, points, order=1):
+#         X,Y = np.meshgrid(self.df_matrix.columns,
+#                           self.df_matrix.index)
+#         print(X)
+        #print(points)
+        xy_pts = [(i,j) for i,j,k in points]
+        poly_path=Path(xy_pts)
+        coors=np.hstack((self.df[self.plot_x].to_numpy().reshape(-1, 1), 
+                         self.df[self.plot_y].to_numpy().reshape(-1,1)))
+        mask = poly_path.contains_points(coors)
+        print(coors)
+        #mask = mask.reshape(len(self.df_matrix.columns), len(self.df_matrix.index))
+        mask = np.invert(mask).astype(int)
+        #Z_masked = np.multiply(mask,self.df_matrix)
+        self.df[self.plot_z+' corrected'] = np.multiply(mask,self.df[self.plot_x])
+        self.df_matrix = self.df.pivot_table(values=self.plot_z+' corrected',
+                                             index=self.plot_y,
+                                             columns=self.plot_x,
+                                             aggfunc='first')
+        plt.imshow(self.df_matrix)
+        print(mask)
+        plt.show()
+        fit_dir = 'x' #fit direction
+        dir_dict = {'x': self.plot_x, 'y': self.plot_y}
+        var_dir = dir_dict.keys().remove(fit_dir)[0] #variable direction
+        for val in df[dir_dict[var_dir]].unique():
+            df_1d = self.df.query(f'{dir_dict[var_dir]}={val} & {self.plot_z+' corrected'}!=0') #change to mask
+            fit_1d = np.polyfit(df_1d[fit_dir], df_1d[self.plot_z+' corrected'], order)
+            np.polyval(fit_1d,df_1d[fit_dir]) #subtract whole line from fit values
+        
+        if order == 1:
+            # best-fit linear plane
+            A = np.c_[points[:,0], points[:,1], np.ones(points.shape[0])]
+            C,_,_,_ = np.linalg.lstsq(A, points[:,2], rcond=None)    # coefficients
+            #print(C)
+            # evaluate it on grid
+##            Z = C[0]*X + C[1]*Y + C[2]
+##            print(Z)
+            self.df['Zero fit'] = C[0]*self.df[self.plot_x] + \
+                                  C[1]*self.df[self.plot_y] + C[2]
+            #print(self.df)
+        elif order == 2:
+            x, y, z = points.T
+            #x, y = x - x[0], y - y[0]  # this improves accuracy
+
+            # make Matrix:
+            G = self.poly_matrix(x, y, order)
+            # Solve for np.dot(G, m) = z:
+            m = np.linalg.lstsq(G, z, rcond=None)[0]
+            #print('m', m)
+            # Evaluate it on a grid...
+##            GG = self.poly_matrix(X.ravel(), Y.ravel(), order)
+##            Z = np.reshape(np.dot(GG, m), X.shape)
+##            print(Z)
+            self.df['Zero fit'] = np.polynomial.polynomial.polyval2d(self.df[self.plot_x],
+                                                                     self.df[self.plot_y],
+                                                                     np.reshape(m, (-1, 3)))
+        
+        self.df[self.plot_z+' corrected'] = self.df[self.plot_z]-self.df['Zero fit']
+
+        #organize data into matrix for heatmap plot
+        self.df_matrix = self.df.pivot_table(values=self.plot_z+' corrected',
+                                             index=self.plot_y,
+                                             columns=self.plot_x,
+                                             aggfunc='first')
+        
     #K-means cluster Z data
     def get_kmeans(self, n_clusters=2):
         kmeans = KMeans(n_clusters=n_clusters)
