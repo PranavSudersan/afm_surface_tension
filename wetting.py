@@ -460,7 +460,7 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
     return output_df, fdfit_dict, fddata_dict, fig_list
 
 
-def get_surface_tension(drop_df, simu_df_full, contact_angle, angle_dict, transition_height=None,
+def get_surface_tension(drop_df, simu_df_full, contact_angle, tip_angle=None,
                         fd_file_paths=None, file_path=None, save=False):
     
     #import simulation data
@@ -488,11 +488,8 @@ def get_surface_tension(drop_df, simu_df_full, contact_angle, angle_dict, transi
         
 #         print(output_df['Surface Tension (mN)'])
     
-    output_df = drop_df.copy()    
-    shape = 'Cone' #'Cone','Pyramid'
-    force_var = 'Force_Eng' if shape == 'Cone' else 'Force_Calc' # 'Force_Eng', 'Force_Calc'
-    simu_df = simu_df_full[simu_df_full['Tip shape'] == shape].reset_index(drop=True)
-    tip_angle = angle_dict[shape]
+    output_df = drop_df.copy()
+    simu_df = simu_df_full[simu_df_full['Tip shape'] == 'Cone'].reset_index(drop=True)
     if fd_file_paths != None:
         if contact_angle != None:
             ca_nearest = min(simu_df['Top_Angle'].unique(),
@@ -504,7 +501,7 @@ def get_surface_tension(drop_df, simu_df_full, contact_angle, angle_dict, transi
         ##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
 
             #3rd order polynomial fit of Force-Contact radius data
-            fr_fit = np.polyfit(simu_df_filtered['Contact_Radius'], simu_df_filtered[force_var], 3)
+            fr_fit = np.polyfit(simu_df_filtered['Contact_Radius'], simu_df_filtered['Adhesion'], 3)
             output_df['F_fit'] = np.polyval(fr_fit,output_df['R/d'])
             output_df['yd/F'] = -1/(2*np.pi*output_df['F_fit']) #inverse
             output_df['Surface Tension FD (mN)'] = 1000*output_df['yd/F']*output_df['Adhesion (FD)']/\
