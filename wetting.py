@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 import sys
 import os
 import traceback
-#import copy
+import copy
 import pandas as pd
 import numpy as np
 from scipy import integrate
@@ -335,13 +335,15 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
             jumpin_distance = distance_data_dict['approach'][jumpin_id] - distance_data_dict['approach'].min()
             afm_plot.ax_fd.plot(distance_data_dict['approach'][jumpin_id], force_data_dict['approach'][jumpin_id],
                                 marker='*', markersize='10')
-            print('jumpin distance', jumpin_distance)
+            #print('jumpin distance', jumpin_distance)
             jumpin_halfpos = distance_data_dict['approach'].min() + 0.5*jumpin_distance
             afm_plot.plotWidget.wid.updateCursor(afm_plot.plotWidget.wid.cursor1, distance_data_dict[force_cycle][adh_id])
                                                  #afm_plot.xAxisData.min())
             afm_plot.plotWidget.wid.updateCursor(afm_plot.plotWidget.wid.cursor2, jumpin_halfpos)
                                                  #afm_plot.xAxisData.max())
-            afm_plot.updatePosition(trigger=True)
+            afm_plot.updatePosition(trigger=False) #set to true for FD fitting!!
+            afm_plot.plotWidget.wid.cursor1.remove() #comment this to show cursors for FD fitting
+            afm_plot.plotWidget.wid.cursor2.remove() #comment this to show cursors for FD fitting
             
 
             #legend remove duplicates and sort
@@ -364,11 +366,11 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
             afm_plot.plotWidget.wid.draw_idle()
             #plt.show()
             afm_plot.ax_fd.axhline(y=force_zero, linestyle=':')
-            afm_plot.plotWidget.showWindow()
+            #afm_plot.plotWidget.showWindow() #uncomment this to show plot window to set FD fitting range
 
             cursor_index = afm_plot.cursor_index #positions of cursors
             fit_distance = abs(afm_plot.xAxisData[cursor_index[1]] - afm_plot.xAxisData[cursor_index[0]])
-            print('Fit distance', fit_distance)
+            #print('Fit distance', fit_distance)
             
             #FD fitting
 #             force_shifted = [x-force_zero for x in force_data]
@@ -394,7 +396,7 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
             fd_roots = np.roots(fd_linfit)
             fd_roots_filtered = fd_roots[(fd_roots>0)]
             wetted_length = min(fd_roots_filtered)
-            print('FD wetted length:', wetted_length)
+            #print('FD wetted length:', wetted_length)
             
             #get area under curve CHECK THIS!
 #             energy_rangeid = [jumpin_id, (np.abs(distance_data_dict[force_cycle]\
@@ -408,15 +410,15 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
             energy_slice = slice(*energy_rangeid)
             energy_adhesion = integrate.simps(force_shifted[energy_slice],
                                               distance_shifted[energy_slice])
-            print('energy',label, energy_adhesion)
+            #print('energy',label, energy_adhesion)
             
-            afm_plot.ax_fd.fill_between(distance_data_dict[force_cycle][energy_slice],
-                                        force_zero,
-                                        force_data_dict[force_cycle][energy_slice],
-                                        color = 'black', alpha=0.1)
+#             afm_plot.ax_fd.fill_between(distance_data_dict[force_cycle][energy_slice],
+#                                         force_zero,
+#                                         force_data_dict[force_cycle][energy_slice],
+#                                         color = 'black', alpha=0.1)
             
             fig_savepath = f'{output_path}/FD_curves_{label_text}.png'
-            fig_list.append(afm_plot.fig_fd)
+            fig_list.append(copy.copy(afm_plot.fig_fd))
             #plt.show(block=True)
             afm_plot.fig_fd.savefig(fig_savepath, bbox_inches = 'tight',
                                     transparent = False)
@@ -460,7 +462,7 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
     return output_df, fdfit_dict, fddata_dict, fig_list
 
 
-def get_surface_tension(drop_df, simu_df_full, contact_angle, tip_angle=None,
+def get_surface_tension(drop_df, simu_df_full, contact_angle, tip_shape=None, tip_angle=None,
                         fd_file_paths=None, file_path=None, save=False):
     
     #import simulation data
@@ -489,7 +491,7 @@ def get_surface_tension(drop_df, simu_df_full, contact_angle, tip_angle=None,
 #         print(output_df['Surface Tension (mN)'])
     
     output_df = drop_df.copy()
-    simu_df = simu_df_full[simu_df_full['Tip shape'] == 'Cone'].reset_index(drop=True)
+    simu_df = simu_df_full[simu_df_full['Tip shape'] == tip_shape].reset_index(drop=True)
     if fd_file_paths != None:
         if contact_angle != None:
             ca_nearest = min(simu_df['Top_Angle'].unique(),
@@ -549,14 +551,15 @@ def get_surface_tension(drop_df, simu_df_full, contact_angle, tip_angle=None,
 #                 output_df.at[i,'ys/F'] = ys_f
 #                 output_df.at[i,'Simulation file'] = simu_df_filtered2['File path'].iloc[0]
                 
-    
+        output_df['Tip shape'] = tip_shape
+        print(tip_shape)
         print(output_df['Surface Tension FD (mN)'])
-        print(simu_df_filtered)
+        #print(simu_df_filtered)
         
     #save final output
     if save == True:
         afm_filename = output_df['AFM file'].iloc[0].split('/')[-1][:-4]
-        output_df.to_excel(f'{file_path}/output_FR-{afm_filename}.xlsx')
+        output_df.to_excel(f'{file_path}/output_{tip_shape}-{afm_filename}.xlsx')
 
     return output_df
 

@@ -186,6 +186,7 @@ class AFMPlot:
                                          cursor2_init=1,
                                          fixYLimits = False,
                                          method = self.updatePosition)
+        self.plotWidget.wid.clicked_artist = None
 
     def updatePosition(self, trigger=False):
 
