@@ -10,9 +10,10 @@ import pandas as pd
 import numpy as np
 from scipy import integrate
 import scipy.ndimage as ndimage
+import surfevol
 
 
-def get_afm_image(file_path, output_dir, level_order=1, jump_tol=0.8):
+def get_afm_image(file_path, output_dir, level_order=1, denoise_size = 1, jump_tol=0.8):
     #import data
     jpk_data = JPKAnalyze(file_path, None, jump_tol=jump_tol)
     
@@ -48,6 +49,7 @@ def get_afm_image(file_path, output_dir, level_order=1, jump_tol=0.8):
     anal_data_h = DataAnalyze(jpk_data, volume_mode)
     if len(points_data)!=0:#tilt correction
         anal_data_h.level_data(points_data, order=level_order)
+        anal_data_h.remove_spikes(window=denoise_size) #filter spiky noises
         jpk_data.df[volume_mode] = anal_data_h.df.copy()
         #jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['z'] += ' corrected'
         #jpk_data.ANALYSIS_MODE_DICT[volume_mode]['plot_parameters']['title'] += ' corrected'
@@ -136,7 +138,7 @@ def get_drop_prop(jpk_data, anal_data_h, output_dir, level_order=1):
     
     ###fit data
     data_fit = DataFit(jpk_data, volume_mode,
-                       'Sphere-RC', img_anal,
+                       'Sphere', img_anal,
                        zero = zero_height,
                        output_path=output_dir)#,"Height>=0.5e-7",
                        #guess=[1.5e-5,-1e-5],bounds=([1e-6,-np.inf],[1e-4,np.inf]),
@@ -238,8 +240,8 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
     fig_list = []
     
     df_adh = jpk_map.df[segment_mode]
-    x_array = df_adh['X']
-    y_array = df_adh['Y']
+    x_array = np.array(df_adh['X'])
+    y_array = np.array(df_adh['Y'])
     data_dict = {'Label': [],
                 'Adhesion (FD)': [],
                 'Jumpin distance (FD)': [],
@@ -298,12 +300,13 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
             #print(force_data_dict)
             #print(distance_data_dict)
             force_zero = np.average(force_data[:100]) #CHECK RANGE FOR ZERO FORCE
-            distance_zero = np.average(distance_data[np.argmax(force_data)]) #CHECK  DISTANCE OF CONTACT POINT
+            #distance_zero = np.average(distance_data[np.argmax(force_data)]) #CHECK  DISTANCE OF CONTACT POINT, taken as max force point
             #adh_id = np.argmin(force_data)
             #distance_zero = distance_data[adh_id] #CHECK THIS!
             
             adhesion = force_zero - force_data_dict[force_cycle].min()
             adh_id = np.argmin(force_data_dict[force_cycle])
+            distance_zero = distance_data_dict[force_cycle][adh_id] #CHECK THIS! Point of tip contact taken to be same as adhesion point
             
             #get FD slope at retract
 ##            num_points = len(df.index)
@@ -341,9 +344,9 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
                                                  #afm_plot.xAxisData.min())
             afm_plot.plotWidget.wid.updateCursor(afm_plot.plotWidget.wid.cursor2, jumpin_halfpos)
                                                  #afm_plot.xAxisData.max())
-            afm_plot.updatePosition(trigger=False) #set to true for FD fitting!!
-            afm_plot.plotWidget.wid.cursor1.remove() #comment this to show cursors for FD fitting
-            afm_plot.plotWidget.wid.cursor2.remove() #comment this to show cursors for FD fitting
+            afm_plot.updatePosition(trigger=True) #set to true for FD fitting!!
+#             afm_plot.plotWidget.wid.cursor1.remove() #comment this to show cursors for FD fitting
+#             afm_plot.plotWidget.wid.cursor2.remove() #comment this to show cursors for FD fitting
             
 
             #legend remove duplicates and sort
@@ -366,7 +369,7 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
             afm_plot.plotWidget.wid.draw_idle()
             #plt.show()
             afm_plot.ax_fd.axhline(y=force_zero, linestyle=':')
-            #afm_plot.plotWidget.showWindow() #uncomment this to show plot window to set FD fitting range
+            afm_plot.plotWidget.showWindow() #uncomment this to show plot window to set FD fitting range
 
             cursor_index = afm_plot.cursor_index #positions of cursors
             fit_distance = abs(afm_plot.xAxisData[cursor_index[1]] - afm_plot.xAxisData[cursor_index[0]])
@@ -462,51 +465,36 @@ def analyze_drop_fd(fd_file_paths, jpk_map, img_anal,
     return output_df, fdfit_dict, fddata_dict, fig_list
 
 
-def get_surface_tension(drop_df, simu_df_full, contact_angle, tip_shape=None, tip_angle=None,
+def import_simulation_data(tip_shape, tip_angle):
+    simu_folderpath = f'simulation_data/{tip_shape}/TA_{tip_angle}/' 
+    #combine simulation data for tip geometry
+    simu_df_fd, simu_df_adh = surfevol.combine_simul_dirs(simu_folderpath,
+                                                          fd_fit_order=2, plot=False)
+    return simu_df_fd, simu_df_adh
+
+# calculate from adhesion force while assuming fixed contact angle
+def get_surface_tension(drop_df, contact_angle, tip_shape, tip_angle,
                         fd_file_paths=None, file_path=None, save=False):
-    
-    #import simulation data
-##    simu_filepath = 'E:/Work/Surface Evolver/afm_pyramid/data/20210325_nps/height=0/'\
-##                    'data-CA_p30-h 0-Rsi1.5_Rsf3.5.txt'
-##    simu_df = pd.read_csv(simu_filepath,delimiter='\t')
-#     if contact_angle != None:
-#         ca_nearest = min(simu_df['Top_Angle'].unique(),
-#                          key=lambda x:abs(x-contact_angle))
-#         simu_df_filtered = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index()
-#     ##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
-
-#         #3rd order polynomial fit of Force-Contact radius data
-#         fr_fit = np.polyfit(simu_df_filtered['Contact_Radius'], simu_df_filtered['Force_Calc'], 3)
-#         output_df['F_fit'] = np.polyval(fr_fit,output_df['R/s'])
-#         output_df['ys/F'] = -1/(2*np.pi*output_df['F_fit']) #inverse
-
-#         #surface tension in mN/m
-#         output_df['Surface Tension (mN)'] = 1000*output_df['ys/F']*output_df['Max Adhesion']/\
-#                                        output_df['s']
-
-#         #miscellaneous data
-#         output_df['Simulation contact angle'] = ca_nearest
-#         output_df['Simulation file'] = simu_df_filtered['File path'].iloc[0]
-        
-#         print(output_df['Surface Tension (mN)'])
-    
+    print("adhesion method")
+    _, simu_df = import_simulation_data(tip_shape, tip_angle)
     output_df = drop_df.copy()
-    simu_df = simu_df_full[simu_df_full['Tip shape'] == tip_shape].reset_index(drop=True)
+    #simu_df = simu_df_full[simu_df_full['Tip shape'] == tip_shape].reset_index(drop=True)
     if fd_file_paths != None:
         if contact_angle != None:
             ca_nearest = min(simu_df['Top_Angle'].unique(),
                              key=lambda x:abs(x-contact_angle))
             simu_df_filtered = simu_df[simu_df['Top_Angle'] == ca_nearest].reset_index(drop=True)
+
             if tip_angle != None:#Cone_Angle,Front_Angle
                 simu_df_filtered = simu_df_filtered[simu_df_filtered['Cone_Angle'] == tip_angle].reset_index()
                 output_df['Tip angle'] = tip_angle
         ##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
-
+            
             #3rd order polynomial fit of Force-Contact radius data
             fr_fit = np.polyfit(simu_df_filtered['Contact_Radius'], simu_df_filtered['Adhesion'], 3)
             output_df['F_fit'] = np.polyval(fr_fit,output_df['R/d'])
             output_df['yd/F'] = -1/(2*np.pi*output_df['F_fit']) #inverse
-            output_df['Surface Tension FD (mN)'] = 1000*output_df['yd/F']*output_df['Adhesion (FD)']/\
+            output_df['Surface Tension (fixed, mN/m)'] = 1000*output_df['yd/F']*output_df['Adhesion (FD)']/\
                                                    output_df['Max Height']
             output_df['Simulation contact angle'] = ca_nearest
         else:
@@ -553,13 +541,13 @@ def get_surface_tension(drop_df, simu_df_full, contact_angle, tip_shape=None, ti
                 
         output_df['Tip shape'] = tip_shape
         print(tip_shape)
-        print(output_df['Surface Tension FD (mN)'])
+        print(output_df['Surface Tension (fixed, mN/m)'])
         #print(simu_df_filtered)
         
     #save final output
     if save == True:
         afm_filename = output_df['AFM file'].iloc[0].split('/')[-1][:-4]
-        output_df.to_excel(f'{file_path}/output_{tip_shape}-{afm_filename}.xlsx')
+        output_df.to_excel(f'{file_path}/output_adh_{tip_shape}-{afm_filename}.xlsx')
 
     return output_df
 
@@ -762,8 +750,11 @@ def get_surface_tension3(drop_df, simu_df_anal, fixed_contact_angle, fd_file_pat
 
     return output_df
 
-def get_surface_tension4(afm_df, simu_df, fdfit_dict=None, fddata_dict=None, file_path=None, save=False):
+#get surface tension by polynomial fitting as well as fixed contact angle
+def get_surface_tension4(afm_df, tip_shape, tip_angle, contact_angle, fdfit_dict=None, fddata_dict=None, file_path=None, save=False):
+    print("Poly-fit method")
     drop_df = afm_df.copy()
+    simu_df, simu_df_adh = import_simulation_data(tip_shape, tip_angle)
     force_var = 'Force_fit'
     plt.style.use('seaborn-bright')
     fig, ax = plt.subplots()
@@ -817,10 +808,11 @@ def get_surface_tension4(afm_df, simu_df, fdfit_dict=None, fddata_dict=None, fil
             #find surface tension at minimum fitting error
             RMSEmin_ind = RMSE_list.index(min(RMSE_list))
             drop_df.at[i,'Simulation R/d'] = rs_nearest
-            drop_df.at[i,'Surface Tension (error min, mN)'] = surf_ten_list[RMSEmin_ind]*1000
-            drop_df.at[i,'Tip contact angle (error min)'] = ca_list[RMSEmin_ind]
-            drop_df.at[i,'RMSE (error min)'] = RMSE_list[RMSEmin_ind]
-            drop_df.at[i,'R square (error min)'] = rsquare_list[RMSEmin_ind]
+            drop_df.at[i,'Surface Tension (polyfit, mN/m)'] = surf_ten_list[RMSEmin_ind]*1000
+            drop_df.at[i,'Tip contact angle (polyfit)'] = ca_list[RMSEmin_ind]
+            drop_df.at[i,'RMSE (polyfit)'] = RMSE_list[RMSEmin_ind]
+            drop_df.at[i,'R square (polyfit)'] = rsquare_list[RMSEmin_ind]
+            
             #filter simulation data for minimum error
             simu_df_ca_filtered = simu_df_ca[simu_df_ca['Top_Angle'] == ca_list[RMSEmin_ind]]
             
@@ -830,6 +822,25 @@ def get_surface_tension4(afm_df, simu_df, fdfit_dict=None, fddata_dict=None, fil
                     linestyle='-.', color=colors[ind]) #exp data fit plot
             ax.plot(fddata_dict[i][0], fddata_dict[i][1], label=f'{i}', 
                     linestyle='-', color=colors[ind]) #exp data raw plot
+            
+    if contact_angle == None:        
+        contact_angle = drop_df['Tip contact angle (polyfit)'].mean()        
+    ca_nearest = min(simu_df_adh['Top_Angle'].unique(),
+                     key=lambda x:abs(x-contact_angle))
+    simu_df_adh_filtered = simu_df_adh[simu_df_adh['Top_Angle'] == ca_nearest].reset_index(drop=True)
+    simu_df_adh_filtered = simu_df_adh_filtered[simu_df_adh_filtered['Cone_Angle'] == tip_angle].reset_index()
+    
+##    simu_df_filtered['ys/F'] = -1/(2*np.pi*simu_df_filtered['Force_Calc']) #inverse
+
+    #3rd order polynomial fit of Force-Contact radius data
+    fr_fit = np.polyfit(simu_df_adh_filtered['Contact_Radius'], simu_df_adh_filtered['Adhesion'], 3)
+    drop_df['F_fit'] = np.polyval(fr_fit,drop_df['R/d'])
+    drop_df['yd/F'] = -1/(2*np.pi*drop_df['F_fit']) #inverse
+    drop_df['Surface Tension (fixed, mN/m)'] = 1000*drop_df['yd/F']*drop_df['Adhesion (FD)']/\
+                                           drop_df['Max Height']
+    drop_df['Tip contact angle (fixed)'] = ca_nearest
+    drop_df['Tip angle'] = tip_angle
+    drop_df['Tip shape'] = tip_shape
             
   
 #     g = sns.lineplot(x='Distance real',  y='Force real', hue= 'Top_Angle',
@@ -853,10 +864,15 @@ def get_surface_tension4(afm_df, simu_df, fdfit_dict=None, fddata_dict=None, fil
     
     ax.ticklabel_format(axis='x', style='sci', scilimits=(-6,-6))
     fig.suptitle('Poly fits: expt vs simulation')
+    
+    
+    print(tip_shape)
+    print(drop_df[['Surface Tension (fixed, mN/m)', 'Tip contact angle (fixed)',
+                   'Surface Tension (polyfit, mN/m)','Tip contact angle (polyfit)']])
     #save final output
     if save == True:
         afm_filename = drop_df['AFM file'].iloc[0].split('/')[-1][:-4]
-        drop_df.to_excel(f'{file_path}/output_polyfit-{afm_filename}.xlsx')
+        drop_df.to_excel(f'{file_path}/output_{tip_shape}-{afm_filename}.xlsx')
             
     return drop_df, fig
             

@@ -257,7 +257,10 @@ class DataFit:
                  output_path=None):
         FIT_DICT = {'Sphere-RC': {'function': self.sphere_rc,
                                   'params': 'R,c'
-                                  }
+                                  },
+                    'Sphere': {'function': self.sphere,
+                                  'params': 'R,c,x0,y0'
+                              }
                     } #'func' arg keys and params
 ##        df_filt = jpk_anal.df.query(filter_string)
         coords = img_anal.coords
@@ -293,14 +296,18 @@ class DataFit:
                 base_r = min([x_end-x_start, y_end-y_start])/2
                 h_max = c-zero
                 #https://mathworld.wolfram.com/SphericalCap.html
-                R_guess = (base_r**2 + h_max**2)/(2*h_max)                
+                R_guess = (base_r**2 + h_max**2)/(2*h_max)
+                x0_guess = 0.5*(x_start+x_end)
+                y0_guess = 0.5*(y_start+y_end)
                 
 ##                R_guess = min(map(abs,[bbox[key][0]-bbox[key][2],
 ##                                       bbox[key][1]-bbox[key][3]]))
-                guess = [R_guess, -R_guess]
+                guess = {'Sphere-RC': [R_guess, -R_guess],
+                         'Sphere': [R_guess, -R_guess, x0_guess, y0_guess]
+                        }
                 #fit
                 popt, _ = curve_fit(FIT_DICT[func]['function'], data, data[:,2],
-                                    p0=guess, bounds=bounds)
+                                    p0=guess[func], bounds=bounds)
 
                 #TODO: weed out bad fits
                 self.fit_output[key] = dict(zip(FIT_DICT[func]['params'].split(','), popt))
@@ -319,6 +326,8 @@ class DataFit:
                 base_r_fit = (h_fit*((2*popt[0])-h_fit))**0.5
                 self.fit_output[key]['h_fit'] = h_fit #fitted height
                 self.fit_output[key]['base_r_fit'] = base_r_fit #fitted contact radius
+                if len(popt) == 4:
+                    a,b = popt[2], popt[3]
                 
                 x_fit, y_fit = np.mgrid[a-base_r_fit:a+base_r_fit:complex(0,num_fit),
                                         b-base_r_fit:b+base_r_fit:complex(0,num_fit)]
@@ -355,8 +364,13 @@ class DataFit:
         a, b = X[k, 0], X[k, 1]
         x, y, z = X.T
         return C + (abs((R**2)-((x-a)**2)-((y-b)**2)))**0.5
+    
+    def sphere(self, X, R, C, x0, y0): #sphere function
+        x, y, z = X.T
+        return C + (abs((R**2)-((x-x0)**2)-((y-y0)**2)))**0.5
 
 #analyze processed data from JPKRead
+
 class DataAnalyze:
     def __init__(self, jpk_anal, mode):
         self.plot_params =  jpk_anal.anal_dict[mode]['plot_parameters']        
@@ -370,6 +384,13 @@ class DataAnalyze:
                                              index=self.plot_y,
                                              columns=self.plot_x,
                                              aggfunc='first')
+        
+    def remove_spikes(self, window=3):
+        self.df_matrix = self.df_matrix.rolling(window, axis=0, min_periods=0, center=True).median()
+        df_temp = self.df_matrix.reset_index().melt(id_vars = self.plot_y, 
+                                                    var_name=self.plot_x, value_name=self.plot_z+' corrected')
+        self.df = df_temp.merge(self.df.drop(self.plot_z+' corrected', axis=1), 
+                                on=[self.plot_x, self.plot_y], how='left')
 
     #generate Matrix to use with lstsq for levelling
     def poly_matrix(self, x, y, order=2):

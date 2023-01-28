@@ -16,6 +16,7 @@ def combine_simul_data(simu_folderpath, fit=False, fd_fit_order = 2, plot=False)
                 
                 angle = df_temp['Top_Angle'].iloc[0]
                 Rs = df_temp['Contact_Radius'].iloc[0]
+                cone_angle = df_temp['Cone_Angle'].iloc[0]
                                     
                 #higher order Polynomial fit of ED data to get force by derivative
                 ed_fit = np.polyfit(df_temp['Height'], df_temp['Energy'], fd_fit_order+1)
@@ -31,6 +32,7 @@ def combine_simul_data(simu_folderpath, fit=False, fd_fit_order = 2, plot=False)
                 sph_roots = np.roots(sph_cap_eq)
                 sph_roots_filtered = sph_roots[(sph_roots>0) & (sph_roots<1)]
                 h_max = min(sph_roots_filtered).real
+                #print(df_temp['Contact_Radius'].iloc[0]/h_max,df_temp['Contact_Radius_norm'].iloc[0])
 
                 #CHECK USE OF h_max EVERYWHERE!
                 df_temp['Height'] = df_temp['Height']/h_max
@@ -70,6 +72,7 @@ def combine_simul_data(simu_folderpath, fit=False, fd_fit_order = 2, plot=False)
                     simu_df_anal_temp = pd.DataFrame({'Contact_Radius':[Rs/h_max],
                                                       'Drop_height':[h_max],
                                                       'Top_Angle':[angle],
+                                                      'Cone_Angle':[cone_angle],
                                                       'Adhesion': [adhesion],
                                                       'yd/F':[yd_F],
                                                       'Rupture_Distance':[rupture_distance],
@@ -79,27 +82,27 @@ def combine_simul_data(simu_folderpath, fit=False, fd_fit_order = 2, plot=False)
                 
     
     if not simu_df.empty:
-        simu_df['Average tip angle'] = (simu_df['Top_Angle6']+simu_df['Top_Angle7']+
-                                        simu_df['Top_Angle8']+simu_df['Top_Angle9'])/4
+#         simu_df['Average tip angle'] = (simu_df['Top_Angle6']+simu_df['Top_Angle7']+
+#                                         simu_df['Top_Angle8']+simu_df['Top_Angle9'])/4
         simu_df['Simulation folder'] = simu_folderpath        
     
-    if plot == True and not simu_df.empty:
-        Rs = simu_df['Contact_Radius'].iloc[0]
-        fig = simul_plot(simu_df,
-                         x_var='Height',
-                         y_var=force_var,#force_var,Average Wetted Height,Average tip angle,Energy
-                         hue_var='Top_Angle',
-                         title=f'Simulation data (FD): R/d={Rs:.2f}',
-                         xlabel='Height, h/d',
-                         ylabel=r'$F/2\pi \gamma d$',
-                         leglabel='Contact angle',
-                         fit_order=fd_fit_order)
-#     elif plot_type == 'FR':
-#         fig = simul_plot1(simu_df)
-    else:
-        fig = None
+#     if plot == False and not simu_df.empty:
+#         Rs = simu_df['Contact_Radius'].iloc[0]
+#         fig = simul_plot(simu_df,
+#                          x_var='Height',
+#                          y_var=force_var,#force_var,Average Wetted Height,Average tip angle,Energy
+#                          hue_var='Top_Angle',
+#                          title=f'Simulation data (FD): R/d={Rs:.1f}',
+#                          xlabel='Height, h/d',
+#                          ylabel=r'$F/2\pi \gamma d$',
+#                          leglabel='Contact angle',
+#                          fit_order=fd_fit_order)
+# #     elif plot_type == 'FR':
+# #         fig = simul_plot1(simu_df)
+#     else:
+#         fig = None
 
-    return simu_df, simu_df_anal, fig
+    return simu_df, simu_df_anal
 
 #for adhesion data
 def combine_simul_data2(simu_folderpath, fit=False, fd_fit_order = 2, plot=False):
@@ -202,56 +205,56 @@ def combine_simul_dirs(simu_folderpath, fd_fit_order=2, plot=False):
     simu_df = pd.DataFrame()
     simu_df_anal = pd.DataFrame()
     #plot_type = 'FD' if plot == True else None
-    fig_list = []
+#     fig_list = []
     with os.scandir(simu_folderpath) as folder:
         for fdr in folder:
             if fdr.is_dir():
-                df_temp, simu_df_anal_temp, fig = combine_simul_data2(fdr.path,
-                                                                     fit=True,
-                                                                     fd_fit_order=fd_fit_order,
-                                                                     plot=plot)
+                df_temp, simu_df_anal_temp = combine_simul_data(fdr.path,
+                                                                fit=True,
+                                                                fd_fit_order=fd_fit_order,
+                                                                plot=plot)
                 #simul_plot2(df_temp)
                 simu_df = simu_df.append(df_temp)
                 simu_df_anal = simu_df_anal.append(simu_df_anal_temp)
-                fig_list.append(fig)
+#                 fig_list.append(fig)
     #simu_df.to_excel('simu_out.xlsx')
 
-    if plot == True:
-        simu_df_anal = simu_df_anal.query('`Top_Angle`>30 & `Contact_Radius`<7') #CHECK filtering
-        fig1 = simul_plot(simu_df_anal,
-                          x_var='Rupture_Distance',
-                          y_var='Top_Angle',
-                          hue_var='Contact_Radius',
-                          title='Simulation data: rupture distance',
-                          xlabel='Rupture distance, r/d', 
-                          ylabel='Contact angle', 
-                          leglabel='Drop size, R/d',
-                          fit_order=3)
-        fig_list.append(fig1)
+#     if plot == True:
+#         simu_df_anal = simu_df_anal.query('`Top_Angle`>30 & `Contact_Radius`<7') #CHECK filtering
+#         fig1 = simul_plot(simu_df_anal,
+#                           x_var='Rupture_Distance',
+#                           y_var='Top_Angle',
+#                           hue_var='Contact_Radius',
+#                           title='Simulation data: rupture distance',
+#                           xlabel='Rupture distance, r/d', 
+#                           ylabel='Contact angle', 
+#                           leglabel='Drop size, R/d',
+#                           fit_order=3)
+#         fig_list.append(fig1)
         
-        fig2 = simul_plot(simu_df_anal,
-                          x_var='Top_Angle',
-                          y_var='yd/F',#yd/F,Adhesion
-                          hue_var='Contact_Radius',
-                          title='Simulation data: surface tension',
-                          xlabel='Contact angle', 
-                          ylabel=r'$\gamma d/F$', 
-                          leglabel='Drop size, R/d',
-                          fit_order=3)
-        fig_list.append(fig2)
-    simu_df2 = simu_df.query('`Top_Angle`==30')# & `Front_Angle`>6 & `Contact_Radius`>7') #CHECK filtering    
-    fig3 = simul_plot(simu_df2,
-                     x_var='Cone_Angle',#Front_Angle,Cone_Angle
-                     y_var='yd/F',#'Average tip angle','yd/F'
-                     hue_var='Contact_Radius',
-                     title=f'Simulation data (FD): CA=30',
-                     xlabel='Cone half angle',
-                     ylabel=r'$\gamma d/F$',
-                     leglabel='Drop size',
-                     fit_order=fd_fit_order)
-    fig_list.append(fig3)
+#         fig2 = simul_plot(simu_df_anal,
+#                           x_var='Top_Angle',
+#                           y_var='yd/F',#yd/F,Adhesion
+#                           hue_var='Contact_Radius',
+#                           title='Simulation data: surface tension',
+#                           xlabel='Contact angle', 
+#                           ylabel=r'$\gamma d/F$', 
+#                           leglabel='Drop size, R/d',
+#                           fit_order=3)
+#         fig_list.append(fig2)
+#     simu_df2 = simu_df.query('`Top_Angle`==30')# & `Front_Angle`>6 & `Contact_Radius`>7') #CHECK filtering    
+#     fig3 = simul_plot(simu_df2,
+#                      x_var='Cone_Angle',#Front_Angle,Cone_Angle
+#                      y_var='yd/F',#'Average tip angle','yd/F'
+#                      hue_var='Contact_Radius',
+#                      title=f'Simulation data (FD): CA=30',
+#                      xlabel='Cone half angle',
+#                      ylabel=r'$\gamma d/F$',
+#                      leglabel='Drop size',
+#                      fit_order=fd_fit_order)
+#     fig_list.append(fig3)
         
-    return simu_df, simu_df_anal, fig_list
+    return simu_df, simu_df_anal
 
 
 def simul_plot(simu_df, x_var, y_var, hue_var, title, xlabel, ylabel, leglabel, fit_order=None):
