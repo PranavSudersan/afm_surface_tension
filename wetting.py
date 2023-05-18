@@ -615,6 +615,7 @@ def combine_fd(file_paths, zero_shift=False, output_dir=None, save=False):
             distance_zero = fd_data.df[mode][plot_params['x']].iloc[int(num_pts/2)]
             fd_data.df[mode][plot_params['y']] -= force_zero
             fd_data.df[mode][plot_params['x']] -= distance_zero
+            print(min(fd_data.df[mode][plot_params['y']]))
         label_text = f'{i}' #file_path.split('/')[-1].split('-')[3] #CHANGE INDEX   
         afm_plot.plot_line(fd_data.df[mode], plot_params, label_text,
                           color=colors[i])
