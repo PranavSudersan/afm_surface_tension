@@ -18,7 +18,7 @@ class JPKRead:
         self.segment_path = segment_path
         self.df = {}
         self.file_format = self.file_path.split('.')[-1]
-        if self.file_format == 'jpk-qi-data':
+        if self.file_format in ['jpk-qi-data', 'jpk-force-map']:
             modes = ['Adhesion', 'Snap-in distance']
         elif self.file_format == 'jpk-force':
             modes = ['Force-distance']

@@ -18,6 +18,7 @@ class JPKAnalyze(JPKRead):
 
     #mapping of keys in header files which depend on file format
     FORMAT_KEY_DICT = {'jpk-qi-data': {'position': 'position'},
+                       'jpk-force-map': {'position': 'position'},
                        'jpk-force': {'position': 'start-position'}}
     def __init__(self, file_path, segment_path, jump_tol=0.8):
         #Make sure variable keys in result dict of 'function' definition

@@ -21,7 +21,7 @@ def get_afm_image(file_path, output_dir, level_order=1, denoise_size = 1, jump_t
         segment_mode = 'Height (measured)'
         volume_mode = 'Height (measured)'
         rotation_info = jpk_data.rotation_info
-    elif jpk_data.file_format == 'jpk-qi-data':
+    elif jpk_data.file_format in ['jpk-qi-data', 'jpk-force-map']:
         segment_mode = 'Snap-in distance' #Adhesion
         volume_mode = 'Snap-in distance'
         rotation_info = None #CHECK for QI!
